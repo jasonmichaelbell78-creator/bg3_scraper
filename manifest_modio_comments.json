@@ -1,0 +1,119 @@
+{
+  "dataset": "modio_comments_merged.jsonl",
+  "game": { "name": "Baldur's Gate 3", "modio_game_id": 6715, "modio_game_slug": "baldursgate3" },
+  "scrapers": {
+    "base_sweep": {
+      "script": "bg3_scraper.py",
+      "purpose": "Full mod/file/dependency/event/team/comment sweep across all BG3 mods on mod.io",
+      "host_used": "https://g-6715.modapi.io/v1",
+      "auth": "api_key query param (documented mod.io API)",
+      "run_completed": "2026-07-10T06:18:16-05:00 (America/Chicago, file mtime of modio_mods_full_sweep.jsonl)",
+      "known_defect": "Comment sub-resource fetched with no _offset/_limit pagination loop -- a single default-page (limit=100) request per mod, so any mod with more than ~100 comments was silently truncated"
+    },
+    "deep_refresh": {
+      "script": "modio_deep_comments.py",
+      "version": "v1.0",
+      "run_completed": "2026-07-21T12:30:47-05:00 (America/Chicago, file mtime of modio_comments_deep_refresh.jsonl)",
+      "purpose": "Re-fetch full comment threads for mods the base sweep truncated",
+      "host_used": "https://mod.io/v1/games/@{game_slug}/mods/@{mod_slug}/comments",
+      "auth": {
+        "method": "Cloudflare bot-management session cookies (__cf_bm, __cflb, _cfuvid), minted by one headless-Chromium (Playwright) page load of https://mod.io/g/baldursgate3, reused across a requests.Session() for all subsequent HTTP calls",
+        "headers": ["x-modio-game: 6715", "x-modio-mod: <numeric mod id>", "x-modio-origin: web"],
+        "api_key_used": false,
+        "reauth_events_during_run": 0,
+        "note": "This is a different, undocumented endpoint from the base sweep's api_key-based host; it does not require an api_key at all."
+      },
+      "pagination": {
+        "params": { "_offset": "starts at 0, incremented by len(batch) each call", "_sort": "-id" },
+        "stop_condition": "loop ends when the returned batch is empty OR offset >= response's result_total field",
+        "rate_limit_delay_seconds": 0.4
+      },
+      "mod_selection_rule": {
+        "description": "A mod qualifies for deep-refresh if its row count in modio_comments_fullsweep.jsonl (the base sweep's comment file) is >= 100",
+        "threshold": 100,
+        "rationale": "The base sweep made one unpaginated request per mod at the API's default page size (100). Any mod at/above that count is provably truncated; any mod below it is provably complete, since a single default-size page cannot be truncated when the true total is under the page size.",
+        "mods_matched": 115
+      },
+      "outcome": {
+        "mods_targeted": 115,
+        "mods_fully_captured": 115,
+        "mods_partially_captured": 0,
+        "mods_failed": 0,
+        "mods_skipped": 0,
+        "mods_inaccessible": 0,
+        "total_comments_fetched": 31266,
+        "per_mod_detail_file": "manifest_modio_per_mod.csv",
+        "displayed_vs_captured": "For all 115 mods, captured count equals mod.io's own result_total field by construction of the pagination stop condition -- the loop cannot exit early. Independently spot-checked against the live page UI for mod_id 5714166 (DTO: Otherworldly Archetypes): page displayed 'Discussion 129', captured count 129, exact match."
+      }
+    },
+    "merge": {
+      "script": "modio_merge_comments.py",
+      "version": "v1.1",
+      "run_completed": "2026-07-21T12:54:17-05:00 (America/Chicago, file mtime of modio_comments_merged.jsonl)",
+      "logic": "modio_comments_fullsweep.jsonl rows for the 115 refreshed mod_ids are dropped and replaced by modio_comments_deep_refresh.jsonl rows; all remaining rows deduplicated by comment `id`",
+      "note": "v1.0 of this script (run 2026-07-21T12:31:00-05:00) did not deduplicate and is superseded; its output is not retained."
+    }
+  },
+  "deduplication": {
+    "key": "comment `id` (globally unique per mod.io, independent of mod_id)",
+    "rule": "Keep the first occurrence per id in file-processing order (untouched-old rows processed before new-refresh rows); drop subsequent rows sharing the same id",
+    "duplicates_found_in_source": {
+      "modio_comments_fullsweep.jsonl": { "duplicate_id_groups": 184, "extra_rows": 184 },
+      "modio_comments_deep_refresh.jsonl": { "duplicate_id_groups": 0, "extra_rows": 0 }
+    },
+    "duplicates_dropped_from_merged_output": 128,
+    "duplicate_count_breakdown": "Of the original 184 duplicate-id groups in modio_comments_fullsweep.jsonl: 56 belonged to mods among the 115 refreshed, so those old rows (dupes included) were already discarded wholesale during the mod-replacement step, before dedup ran. The remaining 128 groups belonged to untouched mods and were caught and dropped by the id-based dedup.",
+    "root_cause": "The base sweep's resume/retry logic was not idempotent at the comment level, causing some comments to be written twice across separate script invocations. Sampled duplicate pairs (e.g. ids 1543954, 1531957) were verified byte-identical across every field (content, timestamp, karma, user) -- confirming simple repeated writes, not conflicting revisions.",
+    "verification_post_fix": "0 duplicate ids remain in modio_comments_merged.jsonl (76,043 rows, 76,043 unique ids)"
+  },
+  "schema_cohorts": {
+    "note": "The merged file mixes rows from two different mod.io hosts/endpoints with slightly different field sets. Both are the same underlying comment data; the difference is purely which endpoint's response shape was captured.",
+    "cohort_A_old_untouched": {
+      "row_count": 44777,
+      "source": "modio_comments_fullsweep.jsonl (bg3_scraper.py, g-6715.modapi.io host, api_key auth) -- SAME original sweep as cohort B's source file, not a separate/different scraper run",
+      "mods_covered": 4246,
+      "extra_field_present": ["_mod_id (scraper-added bookkeeping field)"],
+      "fields_absent_vs_cohort_B": ["game_name", "game_name_id", "resource_name", "resource_name_id", "resource_type"],
+      "caveat": "These 4,246 mods' totals were NOT independently re-verified against mod.io's live result_total -- completeness is inferred from the mod-selection-rule rationale above (single default-100 page, count < 100 observed), not empirically confirmed per mod. A verification-only pass (result_total lookup, no content re-fetch) would take ~4,246 lightweight requests to close this gap."
+    },
+    "cohort_B_deep_refresh": {
+      "row_count": 31266,
+      "source": "modio_comments_deep_refresh.jsonl (modio_deep_comments.py, mod.io/v1 web host, cookie auth)",
+      "mods_covered": 115,
+      "extra_fields_present": ["game_name", "game_name_id", "resource_name", "resource_name_id", "resource_type"],
+      "fields_absent_vs_cohort_A": ["_mod_id"]
+    }
+  },
+  "base_sweep_mod_coverage": {
+    "total_mods_discovered": 8145,
+    "mods_captured_in_metadata_sweep": 8145,
+    "mods_with_zero_comments": 3784,
+    "note": "Base sweep's internal progress checkpoint (modio_progress.json result_total field) matches the row count of modio_mods_full_sweep.jsonl exactly (8145 = 8145), indicating the metadata sweep completed with no dropped mods in its final state. Per-mod fail/skip counts during earlier retries within that sweep were not separately logged, so historical retry-level detail (as opposed to final-state completeness) is not available."
+  },
+  "source_files": [
+    {
+      "file": "modio_mods_full_sweep.jsonl",
+      "role": "mod metadata + name/slug lookup",
+      "rows": 8145,
+      "sha256": "a414b8b8b0543d288724655d1555ba41be4fd43d1c162f47d5c25cdc1cdb7759"
+    },
+    {
+      "file": "modio_comments_fullsweep.jsonl",
+      "role": "base comment sweep (input to merge; left untouched on disk)",
+      "rows": 56417,
+      "sha256": "1170262c52137e86b36d29fb623dde788597611d1ef9258a1587369cd5811f0a"
+    },
+    {
+      "file": "modio_comments_deep_refresh.jsonl",
+      "role": "deep-refresh output (input to merge)",
+      "rows": 31266,
+      "sha256": "501e73c77d45903625f6d53283b295bda095096f4bc8306d17a68702d313b491"
+    },
+    {
+      "file": "modio_comments_merged.jsonl",
+      "role": "FINAL merged, deduplicated dataset -- use this one",
+      "rows": 76043,
+      "sha256": "bcd546e99781a0005390e6e3367460d0f34930f0d35a11863a39689d4155893a"
+    }
+  ]
+}

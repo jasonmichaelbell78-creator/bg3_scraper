@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-modio_deep_comments.py
+modio_deep_comments.py  v1.0  (run 2026-07-21, see manifest_modio_comments.md)
 ================================================================================
 Re-fetches FULL comment threads for mod.io BG3 mods whose last sweep hit the
 ~100-comment ceiling (a pagination gap in the old scraper, not a real API
