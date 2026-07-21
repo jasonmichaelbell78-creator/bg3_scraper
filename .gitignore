@@ -6,6 +6,10 @@ bg3_modio_data.zip
 BG3_Modio_Normalized_Package_v0_1.zip
 bg3_modio_audit.db
 Nexus/
+BG3Scraper.zip
+BG3Scraper/
+nexus_comments_deep_sweep.jsonl
+nexus_comments_merged.jsonl
 
 # Secrets
 .env
@@ -18,3 +22,8 @@ venv/
 
 # Playwright
 test-results/
+.playwright-mcp/
+
+# Personal Claude Code tooling (not part of this project)
+.claude/
+tools/
