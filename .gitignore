@@ -1,0 +1,20 @@
+# Large scraped datasets and archives -- kept local, carried between machines
+# as a zip rather than committed (size + Nexus API acceptable-use policy
+# discourages rehosting bulk API-sourced data publicly).
+bg3_modio_data/
+bg3_modio_data.zip
+BG3_Modio_Normalized_Package_v0_1.zip
+bg3_modio_audit.db
+Nexus/
+
+# Secrets
+.env
+
+# Python
+__pycache__/
+*.pyc
+venv/
+.venv/
+
+# Playwright
+test-results/
