@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.2  (investigation 2026-07-21, see CLAUDE.md)
+nexus_deep_comments.py  v1.3  (investigation 2026-07-21, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -25,11 +25,27 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   AJAX comment-pagination requests (`page.evaluate(fetch(...))`) reuse that
   same per-mod page and don't trigger the issue -- only fresh top-level
   navigations on a stale page do.
-  Even with fresh-page-per-mod, the challenge still fires occasionally under
-  sustained/rapid request volume (looks like IP-level behavioral scoring, not
-  a hard rule) -- v1.2 adds backoff-and-retry (fetch_with_retry) rather than
-  assuming a clean run. Don't be alarmed by an occasional challenge message;
-  worry only if it persists across all retries for many mods in a row.
+  v1.2 also blocked image/font/css/media requests via context.route() to
+  speed things up. A same-mod, same-session A/B test strongly implicated
+  this as A cause (route-blocking enabled -> 403 "Just a moment...";
+  removed, nothing else changed -> 200) -- a browser that never requests
+  its own stylesheets/fonts is a plausible automation signal to Cloudflare.
+  v1.3 removes it. BUT a follow-up --limit 3 run failed on all 3 mods
+  again immediately afterward, including one that had just individually
+  succeeded -- so route-blocking is not the *whole* story. The pattern
+  across this entire debugging session: isolated single-page tests tend to
+  succeed; anything that fires several requests back-to-back (a --limit 3
+  run, or a rapid sequence of one-off debug tests) tends to fail partway
+  through. That looks like cumulative, volume-based IP scoring layered on
+  top of the route-blocking issue -- and critically, every test run (pass
+  or fail) adds to that same tally, so aggressive re-testing makes the
+  next test *less* likely to succeed, not more.
+  UNRESOLVED as of 2026-07-21. Do not debug this by rapid iteration --
+  each attempt costs "budget" against whatever scoring window Cloudflare
+  is using. Next session: let it sit for a genuinely long cooldown (hours,
+  not tens of minutes), then test with exactly ONE page load, not a
+  --limit N script run (which is itself several-to-many requests once
+  comment pagination is included).
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -78,7 +94,6 @@ OBJECT_TYPE = 1  # "mod" content type
 UA = ("Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
       "(KHTML, like Gecko) Chrome/150.0.0.0 Safari/537.36")
 REQUEST_DELAY = 0.5
-BLOCKED_RESOURCE_TYPES = {"image", "media", "font", "stylesheet"}
 
 # BG3 Mod Fixer: outdated, no longer necessary or used by the community
 # (large historical download count, but superseded since patch 7/8) --
@@ -104,10 +119,6 @@ def load_mod_list() -> list[dict]:
 def open_browser_context(playwright):
     browser = playwright.chromium.launch(headless=True)
     context = browser.new_context(user_agent=UA)
-    context.route(
-        "**/*",
-        lambda route: route.abort() if route.request.resource_type in BLOCKED_RESOURCE_TYPES else route.continue_(),
-    )
     return browser, context
 
 

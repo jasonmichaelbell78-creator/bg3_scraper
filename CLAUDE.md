@@ -104,10 +104,10 @@ fully expose.
   but outdated/superseded since patch 7/8, no longer needed by the current
   community (user's call, 2026-07-21).
 
-## `nexus_deep_comments.py` — build status (2026-07-21)
+## `nexus_deep_comments.py` — build status (2026-07-21, UNRESOLVED)
 - Written, mirrors `modio_deep_comments.py`'s shape but had to diverge on
-  auth after two failed approaches — full story is in the script's own
-  docstring (v1.2). Short version:
+  auth after several failed approaches — full story is in the script's own
+  docstring (v1.3). Short version:
   - v1.0 (mod.io pattern: mint cookies once, hand off to `requests`) — 403s
     every time. Confirmed why: see "Auth/cookies" note above.
   - v1.1 (keep one Playwright *page* open, `page.goto()` per mod) — first
@@ -115,30 +115,37 @@ fully expose.
     for a second/third/etc. top-level navigation gets challenged again. Looks
     behavioral (repeated-navigation pattern on one page), not a fingerprint
     check.
-  - **v1.2 (current): one browser *context* stays open for the whole run
-    (so `cf_clearance` persists), but a brand-new page (tab) is opened per
-    mod and closed after** — confirmed working in isolated manual tests
-    (multiple mods in a row, each getting a 200). AJAX comment-pagination
-    calls (`page.evaluate(fetch(...))`) reuse that same per-mod page fine —
-    only fresh top-level navigations on a *stale* page trigger the issue.
-  - Has retry-with-backoff (`fetch_with_retry`, waits 20s then 60s) since
-    the challenge still fires occasionally even with fresh-page-per-mod
-    under heavy request volume — looks like IP-level behavioral scoring
-    from Cloudflare, not a hard rule.
-- **Not yet validated end-to-end against real data.** The debugging session
-  itself (repeated browser launches + failed attempts, back-to-back, over
-  ~30 minutes) most likely tripped a longer IP-level penalty on top of the
-  per-request challenge — a `--limit 3` test kept failing through all three
-  backoff attempts (80s) on every mod, right after the same exact code path
-  had succeeded twice in isolated one-off tests minutes earlier. That
-  pattern (works in isolation, fails under sustained volume) points to
-  Cloudflare escalation from the debugging volume itself, not a code bug.
-  **Next session: let this cool down for a while (probably longer than
-  minutes — could be much longer) before the first test, then run
-  `py nexus_deep_comments.py --limit 3` fresh, cold, without repeated retries
-  in a short window.** If it still fails cold, the auth approach needs
-  more work (candidates: real non-headless browser, residential/rotating
-  IP, or a TLS-fingerprint-matching HTTP client like `curl_cffi` instead of
+  - v1.2 (one browser *context* stays open for the whole run, brand-new
+    page per mod) — confirmed working in isolated manual tests at the time.
+    Also blocked image/font/css/media requests via `context.route()` for
+    speed.
+  - **v1.3: removed the route-blocking.** A clean same-mod, same-session A/B
+    strongly implicated it (blocking on → 403 "Just a moment..."; blocking
+    off, nothing else changed → 200) — a browser that never loads its own
+    stylesheets/fonts is a plausible bot signal. But this was **not the full
+    fix**: a follow-up `--limit 3` run failed on all 3 mods again right
+    after, including one that had just individually succeeded.
+  - Has retry-with-backoff (`fetch_with_retry`, waits 20s then 60s) as a
+    safety net, but it does not reliably recover once things go bad.
+- **Not yet validated end-to-end against real data — genuinely unresolved,
+  not just "needs one more cooldown."** The pattern across the *entire*
+  multi-hour debugging session: isolated single-page tests tend to succeed;
+  anything firing several requests back-to-back (a `--limit 3` run, or a
+  fast sequence of one-off debug tests) tends to fail partway through —
+  even after a ~75–80 minute cooldown that did clear a single test. This
+  looks like cumulative, volume-based IP scoring on top of the
+  route-blocking issue. Critically, **every test — pass or fail — adds to
+  that same tally**, so rapid iteration to "fix" this makes the next
+  attempt less likely to succeed, not more. Do not debug this the way this
+  session did (many browser launches in quick succession); it likely made
+  things worse each time.
+  **Next session: let it sit for a genuinely long cooldown (hours, not
+  tens of minutes) before touching nexusmods.com at all. Then test with
+  exactly ONE page load (not a `--limit N` script run, which is itself
+  several-to-many requests once comment pagination kicks in).** If a single
+  cold request still fails, the approach needs to change (candidates: a
+  real non-headless browser, a residential/rotating IP, or a
+  TLS-fingerprint-matching HTTP client like `curl_cffi` instead of
   Playwright-for-everything).
 - Parsing logic (`parse_comments`) itself is validated — it's the same
   BeautifulSoup extraction shape confirmed against real response HTML
