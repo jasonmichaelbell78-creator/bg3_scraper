@@ -14,6 +14,12 @@ fully expose.
   `.gitignore`) — too large to commit, and Nexus's API acceptable-use policy
   discourages rehosting bulk API-sourced data publicly. They travel between
   machines as a manually-carried zip, not through git.
+- Repo: https://github.com/jasonmichaelbell78-creator/bg3_scraper (renamed
+  from `bg3_nexus_scraper` — it's not Nexus-only anymore).
+- `gh` CLI appears to be missing on this machine (its wrapper points to a
+  path that no longer exists). Git operations here used `git` directly with
+  a cached Windows Credential Manager credential (`credential.helper =
+  manager`, i.e. Git Credential Manager) instead.
 
 ## mod.io — comments gap: CLOSED
 - `bg3_scraper.py` did a full sweep of mods/files/deps/events/team — fine.
@@ -33,10 +39,16 @@ fully expose.
   comments, not ~100.
 - Ran against all 115 previously-capped mods: 31,266 comments fetched, zero
   failures → `modio_comments_deep_refresh.jsonl`.
-- `modio_merge_comments.py`: merges that into `modio_comments_merged.jsonl`
-  (44,905 untouched rows + 31,266 fresh rows, 11,512 stale rows dropped).
+- `modio_merge_comments.py` (v1.1): merges that into `modio_comments_merged.jsonl`
+  (44,777 untouched rows + 31,266 fresh rows, 11,512 stale rows dropped,
+  128 duplicate-id rows deduped out — 76,043 unique rows total).
   **`modio_comments_merged.jsonl` is the file to use going forward** —
   `modio_comments_fullsweep.jsonl` is left as-is, unmerged.
+- Full provenance (scraper versions, run timestamps, mod-selection rule,
+  auth/pagination details, dedup root-cause, file hashes) is in
+  `manifest_modio_comments.md` / `.json`, with per-mod counts in
+  `manifest_modio_per_mod.csv` — written in response to a ChatGPT audit
+  request cross-checking this dataset.
 
 ## Nexus Mods — comments gap: NOT STARTED
 - `nexus_bg3_scraper.py` fully scraped metadata/files/changelogs/dependencies
