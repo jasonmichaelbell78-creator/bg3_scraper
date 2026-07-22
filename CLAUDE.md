@@ -179,6 +179,37 @@ fully expose.
     `--headless` flag stays in the script since it's a legitimate, cheap
     way to re-test this later if Cloudflare's heuristics change, but should
     not be used for the real sweep.
+  - Added `--mod-ids` (v1.7): takes an explicit comma-separated mod ID list,
+    bypassing the tier CSV's file-order slicing that `--limit` does. Needed
+    because the tier CSV is sorted by endorsements descending, so `--limit`
+    can only ever sample from the top of the popularity distribution.
+  - **Timing estimate**: tested 33 mods from the top of the list (68,099
+    comments, ~1 hour) plus 11 more spread across ranks ~100-3,661 via
+    `--mod-ids` (1,059 comments, ~2 min, zero challenges either batch).
+    Comments-per-endorsement ratio differs between the two samples (0.082
+    top-33 vs. 0.157 spread-11 — low-endorsement mods proportionally have
+    *more* comments, not fewer), so extrapolating total volume across all
+    3,661 mods via that ratio against the full endorsement sum (2,918,837)
+    gives a **4.0-7.7 hour** range depending which ratio is used — nowhere
+    near the ~5-day figure a naive flat per-mod extrapolation would give
+    (that approach badly overweights the sample, since it's drawn entirely
+    from the top ~1% by endorsements). Order-of-magnitude confidence only:
+    "hours, not days," not a precise number.
+  - Added a consecutive-failure circuit breaker (v1.8, `CONSECUTIVE_FAILURE_LIMIT
+    = 5` in `nexus_deep_comments.py`): aborts the run early if 5 mods in a row
+    fail outright (each already having exhausted its own 3-attempt retry),
+    rather than silently grinding through the remaining mod list for hours
+    if something systemic breaks (persistent block, network loss, etc.).
+  - **Unattended-run plan**: idle timeout bumped to max (240 min) in personal
+    Codespaces settings; launch via `nohup python3 nexus_deep_comments.py
+    --resume > sweep.log 2>&1 &` + `disown` so the process survives a client
+    disconnect. Deliberately *not* relying on tmux/nohup output to auto-reset
+    the idle timer -- nohup's file-redirected output doesn't reach a terminal
+    at all, so GitHub's idle-timeout mechanism (which resets on terminal I/O,
+    per its docs) won't see it as activity. Since the estimate (4-8h) can
+    exceed the 4h max idle timeout, the plan is to just check in every 2-3
+    hours with `tail -n 20 sweep.log` (an actual keystroke, which does count
+    as activity) rather than assume it survives fully unattended.
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
@@ -186,13 +217,15 @@ fully expose.
    pattern, and HTML shape identified.
 3. ~~Build and validate `nexus_deep_comments.py`~~ Done (v1.5) — see
    build-status section above.
-4. Validate the Codespaces setup (see testing procedure) — unconfirmed as of
-   2026-07-22.
-5. Run the full sweep (`py nexus_deep_comments.py`, all 3,661 mods minus
-   Mod Fixer) and merge into a `nexus_comments_merged.jsonl` analogous to
-   the mod.io merge. Not yet started — full run will take a while (popular
-   mods can be thousands of comments across hundreds of sequential
-   paginated requests) and hasn't been time-estimated yet.
+4. ~~Validate the Codespaces setup~~ Done (2026-07-22) — headed works, headless
+   confirmed broken, resume gap fixed, timing estimated at 4-8 hours.
+5. Run the full sweep (`nohup python3 nexus_deep_comments.py --resume
+   > sweep.log 2>&1 &`, all 3,661 mods minus Mod Fixer, resuming past the
+   44 mods already tested) and merge into a `nexus_comments_merged.jsonl`
+   analogous to the mod.io merge — though unlike mod.io there's no legacy
+   partial dataset to reconcile against, so this may end up being just a
+   filter pass that strips the `_status` sentinel bookkeeping lines rather
+   than a true merge. In progress / about to start as of 2026-07-22.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.

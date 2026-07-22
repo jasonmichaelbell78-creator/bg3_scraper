@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.7  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.8  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -332,6 +332,12 @@ def main():
     print(f"Processing: {len(todo)}")
 
     written = 0
+    consecutive_failures = 0
+    CONSECUTIVE_FAILURE_LIMIT = 5  # a real per-mod hiccup already gets 3 internal retries;
+                                    # this many in a row back-to-back means something systemic
+                                    # broke (persistent Cloudflare block, network loss, etc.) --
+                                    # better to stop loudly than silently grind through the rest
+                                    # of an unattended multi-hour run collecting nothing.
     with sync_playwright() as p:
         browser, context = open_browser_context(p, headless=args.headless)
 
@@ -350,9 +356,16 @@ def main():
                     out.flush()
                     continue
                 except Exception as e:
+                    consecutive_failures += 1
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}) FAILED: {e}")
+                    if consecutive_failures >= CONSECUTIVE_FAILURE_LIMIT:
+                        print(f"\n{consecutive_failures} consecutive failures -- stopping early, "
+                              f"this looks systemic rather than per-mod noise. Re-run with --resume "
+                              f"once whatever broke is resolved.")
+                        break
                     continue
 
+                consecutive_failures = 0
                 if comments:
                     for c in comments:
                         out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, **c}, ensure_ascii=False) + "\n")
