@@ -294,10 +294,11 @@ def main():
     parser.add_argument("--limit", type=int, default=0, help="Only process the first N mods (0 = all)")
     parser.add_argument("--resume", action="store_true", help="Skip mods already present in the output file")
     parser.add_argument("--headless", action="store_true",
-                         help="Launch Chromium headless instead of the default headed window "
-                              "(untested against live Cloudflare as of v1.5 -- the navigator.webdriver "
-                              "patch is believed to be the real fix, not headed state, but this has "
-                              "never actually been run headless against the live site)")
+                         help="Launch Chromium headless instead of the default headed window. "
+                              "CONFIRMED NOT TO WORK (2026-07-22, Codespaces test): triggers a "
+                              "Cloudflare challenge on every retry attempt. Headless Chromium is "
+                              "an independent bot-management signal on top of navigator.webdriver -- "
+                              "kept as a flag in case Cloudflare's heuristics change, not for real use.")
     args = parser.parse_args()
 
     mod_list = load_mod_list()
@@ -331,13 +332,26 @@ def main():
                     comments = fetch_with_retry(context, mod_id)
                 except FileNotFoundError:
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}): mod not found, skipping")
+                    # Sentinel line so --resume treats this mod as done, not "never tried" --
+                    # otherwise a 404'd mod gets re-fetched (and re-404s) on every future resume.
+                    out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, "_status": "not_found"},
+                                          ensure_ascii=False) + "\n")
+                    out.flush()
                     continue
                 except Exception as e:
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}) FAILED: {e}")
                     continue
 
-                for c in comments:
-                    out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, **c}, ensure_ascii=False) + "\n")
+                if comments:
+                    for c in comments:
+                        out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, **c}, ensure_ascii=False) + "\n")
+                else:
+                    # Same problem as the not_found case: a genuine zero-comment result (e.g. the
+                    # NSFW preference gate) writes nothing, so --resume can't tell "done, confirmed
+                    # empty" apart from "never attempted" and re-fetches it -- with real Cloudflare
+                    # exposure -- on every future resume. One sentinel line fixes that.
+                    out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, "_status": "no_comments"},
+                                          ensure_ascii=False) + "\n")
                 out.flush()
                 written += len(comments)
                 print(f"[{i}/{len(todo)}] {name} ({mod_id}): {len(comments)} comments")

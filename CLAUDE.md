@@ -163,10 +163,22 @@ fully expose.
   (the `navigator.webdriver` patch was), but that was never confirmed
   headless against production. Default behavior (headed) is unchanged for
   existing home-network runs.
-- **Not yet validated**: none of this (Codespace container itself, Xvfb
-  desktop, whether Cloudflare treats Azure's IP range differently than a
-  home residential IP) has been tested live yet. See testing procedure
-  below before committing to the full sweep.
+- **Codespaces testing, 2026-07-22:**
+  - Step 2 (single mod, headed, `--limit 1`, mod 366 ImpUI): **passed** —
+    5,565 comments, zero challenges, exact match to the home-run baseline.
+    Confirms the Codespace/Azure IP isn't treated any differently by
+    Cloudflare than the home connection was, and the Xvfb virtual desktop
+    is sufficient for headed Chromium to behave normally.
+  - Step 3 (`--headless`, mod 213 Tav's Hair Salon): **failed** — Cloudflare
+    challenge re-triggered on all 3 retry attempts (0/20/60s backoffs),
+    ultimately raising `PermissionError` and skipping the mod. This settles
+    the question the v1.4 note left open: headless Chromium **is** an
+    independent Cloudflare bot-management signal on top of the
+    `navigator.webdriver` patch, not a non-factor. **Conclusion: headless
+    mode does not work against Nexus; headed (via Xvfb) is required.** The
+    `--headless` flag stays in the script since it's a legitimate, cheap
+    way to re-test this later if Cloudflare's heuristics change, but should
+    not be used for the real sweep.
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
