@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.6  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.7  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -81,6 +81,8 @@ USAGE:
                                            # which has no real network-level path to nexusmods.com --
                                            # a virtual desktop (Xvfb via the desktop-lite devcontainer
                                            # feature) is provided so headed mode also works there)
+  py nexus_deep_comments.py --mod-ids 9117,14349,3405   # spot-check specific mods regardless of
+                                                         # their position in the tier CSV
 ================================================================================
 """
 
@@ -299,10 +301,19 @@ def main():
                               "Cloudflare challenge on every retry attempt. Headless Chromium is "
                               "an independent bot-management signal on top of navigator.webdriver -- "
                               "kept as a flag in case Cloudflare's heuristics change, not for real use.")
+    parser.add_argument("--mod-ids", type=str, default="",
+                         help="Comma-separated list of specific Nexus mod IDs to process, in that "
+                              "order, bypassing the tier CSV's file-order slicing --limit normally "
+                              "does. For spot-checking mods scattered across the list without having "
+                              "to churn through everything ranked ahead of them.")
     args = parser.parse_args()
 
     mod_list = load_mod_list()
-    if args.limit:
+    if args.mod_ids:
+        wanted = [int(x) for x in args.mod_ids.split(",")]
+        by_id = {m["mod_id"]: m for m in mod_list}
+        mod_list = [by_id[mid] for mid in wanted if mid in by_id]
+    elif args.limit:
         mod_list = mod_list[: args.limit]
 
     done_ids: set[int] = set()
