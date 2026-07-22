@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.4  (investigation 2026-07-21, see CLAUDE.md)
+nexus_deep_comments.py  v1.5  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -123,12 +123,15 @@ def load_mod_list() -> list[dict]:
 
 
 def open_browser_context(playwright):
-    # Non-headless: Cloudflare's bot management fingerprints headless Chrome
-    # (missing browser internals, navigator.webdriver, etc.) separately from
-    # whatever IP/volume-based scoring caused the v1.3 failures -- this is
-    # untested against the real site as of writing (see CLAUDE.md cooldown note).
+    # A vanilla playwright.chromium.launch() reports navigator.webdriver = True
+    # -- confirmed locally (2026-07-22) and almost certainly the real cause of
+    # the challenges seen in v1.0-v1.4, not headless state or IP/volume scoring:
+    # the working Playwright MCP browser used during this whole investigation
+    # reports navigator.webdriver = False. Patch it the standard way, before
+    # any page script runs.
     browser = playwright.chromium.launch(headless=False)
     context = browser.new_context(user_agent=UA)
+    context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => false });")
     return browser, context
 
 
