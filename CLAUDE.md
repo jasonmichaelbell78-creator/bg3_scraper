@@ -268,6 +268,45 @@ fully expose.
     still correctly come back empty, rather than first building a detector
     for "was this specifically the adult-content gate."
 
+## Future work: Collections (mod.io + Nexus) -- research only, 2026-07-22
+Not started, no priority set -- pick up after the main comments sweep (and
+its merge step) are done and stable. Both platforms have a "Collections"
+feature (curated bundles of mods) that's a separate data surface from
+everything scraped so far.
+
+- **mod.io**: documented REST v1 endpoints exist --
+  `GET /games/:game-id/collections/:collection-id/mods`, plus
+  `get-mod-collections` / `get-mod-collection`. Same REST API
+  `bg3_scraper.py` already authenticates against with `MODIO_API_KEY`, so
+  this is likely a straightforward extension rather than a new
+  investigation. mod.io's own docs mention comments can be enabled/disabled
+  per-game for collections -- meaning there may be a *third* comments
+  surface (separate from mod comments) to eventually deal with here too.
+- **Nexus**: has an official GraphQL API at `graphql.nexusmods.com`,
+  purpose-built for Collections -- confirmed via Nexus's own open-source
+  `node-nexus-api` client library, which wraps it in a `getCollectionGraph()`
+  call keyed by collection slug (example only showed name/image fields, not
+  comments/revisions). This is a real, documented, sanctioned API surface --
+  a different animal from the reverse-engineered `CommentContainer` widget
+  the mod-comments work had to reverse-engineer.
+- **Amusing/relevant finding**: researching this live, a fetch to
+  `graphql.nexusmods.com` redirected through `ep-mimecast.nexusmods.com` and
+  landed on a literal `security-us.mimecast.com/.../blocked` page --
+  confirming Nexus fronts at least this subdomain with **Mimecast's own Secure
+  Web Gateway**, the same vendor (though presumably an unrelated deployment)
+  blocking `nexusmods.com` on the work network in the first place. Whatever
+  network ends up used to investigate this GraphQL API live will need to be
+  checked against that block too, separately from the Cloudflare-on-the-main-
+  site situation the comments work dealt with.
+- **Unknowns needing live investigation before building anything** (same
+  "go look live first" approach the comments work took, rather than building
+  against assumptions): what auth the GraphQL API actually wants (the
+  existing `NEXUS_API_KEY` REST v1 key, or something separate); whether
+  there's a curated list of BG3 collections anywhere or we'd need to
+  enumerate all collections for the BG3 game ID ourselves on each platform;
+  whether collection comments/discussion go through clean documented
+  endpoints or hit the same kind of gaps mod comments did.
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
@@ -289,6 +328,9 @@ fully expose.
    done, copy `nexus_auth_state.json` into the Codespace, then re-run
    `nexus_deep_comments.py --auth-state nexus_auth_state.json` against the
    mods currently recorded as `no_comments`. Not started.
+7. Collections on mod.io + Nexus (see dedicated section above) -- future
+   work, no priority set, needs live investigation before building anything.
+   Not started.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.
