@@ -13,6 +13,7 @@ nexus_comments_merged.jsonl
 
 # Secrets
 .env
+nexus_auth_state.json
 
 # Python
 __pycache__/

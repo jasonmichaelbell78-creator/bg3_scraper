@@ -210,6 +210,63 @@ fully expose.
     exceed the 4h max idle timeout, the plan is to just check in every 2-3
     hours with `tail -n 20 sweep.log` (an actual keystroke, which does count
     as activity) rather than assume it survives fully unattended.
+  - Correction found live during the actual launch: continuously watching
+    with `tail -f sweep.log` in a connected terminal is a *better* fallback
+    than periodic manual check-ins, since the live output itself is terminal
+    activity and should reset the idle timer automatically for as long as
+    the connection stays open. Only matters while actually connected --
+    closing the laptop/tab still stops the output (and the idle-timeout risk
+    resumes), so it doesn't replace bumping the idle timeout, just adds a
+    zero-effort option when at the computer anyway.
+  - **Full sweep launched 2026-07-22**: `nohup python3 nexus_deep_comments.py
+    --resume > sweep.log 2>&1 &` + `disown`, resuming past the 44 already-
+    tested mods (3,617 remaining). First few results confirmed the resume
+    logic picked up correctly and the pattern from testing holds (occasional
+    single-mod Cloudflare challenges that clear on retry, e.g. mod 3483
+    Extra Gear failed all 3 attempts and will be retried by a future
+    `--resume` since no sentinel gets written for real failures).
+
+## NSFW-gated mods: plan (not yet executed, 2026-07-22)
+- Confirmed gap: NSFW-tagged mods return 0 comments because Nexus hides the
+  thread_id (and the rest of the Posts tab) from an anonymous/non-opted-in
+  session -- not a bug, `fetch_all_comments` correctly returns `[]` when it
+  can't find a thread_id, but that's indistinguishable in the output from a
+  mod that genuinely has zero comments (both produce the same `_status:
+  no_comments` sentinel -- there's no marker yet for *why* a mod came back
+  empty).
+- The tier CSV's `category` column has no adult/NSFW value (it's content-type
+  categories like Gameplay/Armor/Spells), so we can't count how many of the
+  3,661 are affected ahead of time -- only empirically, from sweep output.
+- **Fix requires a logged-in Nexus account with "Show adult content" enabled
+  in its preferences** -- this is account-level on Nexus, not a cookie an
+  anonymous session can set itself. Decided: use a **throwaway account**,
+  not a personal one, since its session gets reused by an automated script.
+- Built ahead of time (while the main sweep was running, so as not to add a
+  second concurrent Cloudflare-exposed session on the same Codespace IP
+  during the big run):
+  - `nexus_login_capture.py`: one-time interactive helper -- opens a real
+    headed Chromium window, you log in and enable adult content by hand,
+    then it saves a Playwright `storage_state` to `nexus_auth_state.json`
+    (gitignored -- this is session/credential data, never committed).
+  - `nexus_deep_comments.py` v1.9: `open_browser_context()` and `main()`
+    take an optional `--auth-state PATH`, passed straight to
+    `browser.new_context(storage_state=...)`. Unset by default (anonymous),
+    so this doesn't change existing behavior.
+- **Deliberately deferred, not run yet**:
+  - The actual account creation + `nexus_login_capture.py` run should
+    happen from home, not the Codespace -- this one-time interactive login
+    doesn't need to dodge Mimecast at all (only bulk scraping does), so
+    there's no reason to fight noVNC/Xvfb desktop interaction inside the
+    Codespace for it. Just run the capture script locally at home, then copy
+    the resulting small JSON file into the Codespace afterward.
+  - Should wait until the main 3,661-mod sweep finishes before doing any of
+    this, to avoid a second browser session hitting nexusmods.com from the
+    same Codespace IP concurrently with the big unattended run.
+  - Once available, the plan is to re-run with `--auth-state
+    nexus_auth_state.json` against the mods already recorded as
+    `no_comments` (not the whole sweep again) -- accepting that most will
+    still correctly come back empty, rather than first building a detector
+    for "was this specifically the adult-content gate."
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
@@ -225,7 +282,13 @@ fully expose.
    analogous to the mod.io merge — though unlike mod.io there's no legacy
    partial dataset to reconcile against, so this may end up being just a
    filter pass that strips the `_status` sentinel bookkeeping lines rather
-   than a true merge. In progress / about to start as of 2026-07-22.
+   than a true merge. **In progress as of 2026-07-22** (launched via nohup,
+   see above).
+6. NSFW-gated mods (see dedicated section above): create a throwaway Nexus
+   account, run `nexus_login_capture.py` from home once the main sweep is
+   done, copy `nexus_auth_state.json` into the Codespace, then re-run
+   `nexus_deep_comments.py --auth-state nexus_auth_state.json` against the
+   mods currently recorded as `no_comments`. Not started.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.

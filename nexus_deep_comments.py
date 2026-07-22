@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.8  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.9  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -83,6 +83,10 @@ USAGE:
                                            # feature) is provided so headed mode also works there)
   py nexus_deep_comments.py --mod-ids 9117,14349,3405   # spot-check specific mods regardless of
                                                          # their position in the tier CSV
+  py nexus_deep_comments.py --auth-state nexus_auth_state.json --mod-ids 4752,6045
+                                           # re-check specific mods with a logged-in, adult-content-
+                                           # enabled session (see nexus_login_capture.py) instead of
+                                           # the default anonymous one
 ================================================================================
 """
 
@@ -129,7 +133,7 @@ def load_mod_list() -> list[dict]:
     return mods
 
 
-def open_browser_context(playwright, headless: bool = False):
+def open_browser_context(playwright, headless: bool = False, auth_state: str | None = None):
     # A vanilla playwright.chromium.launch() reports navigator.webdriver = True
     # -- confirmed locally (2026-07-22) and almost certainly the real cause of
     # the challenges seen in v1.0-v1.4, not headless state or IP/volume scoring:
@@ -137,7 +141,10 @@ def open_browser_context(playwright, headless: bool = False):
     # reports navigator.webdriver = False. Patch it the standard way, before
     # any page script runs.
     browser = playwright.chromium.launch(headless=headless)
-    context = browser.new_context(user_agent=UA)
+    # auth_state (see nexus_login_capture.py) is a logged-in session that can see
+    # adult-content-gated mods -- an anonymous context never gets a thread_id for
+    # those, so fetch_all_comments() correctly but unhelpfully returns [].
+    context = browser.new_context(user_agent=UA, storage_state=auth_state)
     context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => false });")
     return browser, context
 
@@ -306,6 +313,11 @@ def main():
                               "order, bypassing the tier CSV's file-order slicing --limit normally "
                               "does. For spot-checking mods scattered across the list without having "
                               "to churn through everything ranked ahead of them.")
+    parser.add_argument("--auth-state", type=str, default=None,
+                         help="Path to a Playwright storage_state JSON from a logged-in session "
+                              "with 'Show adult content' enabled (see nexus_login_capture.py). "
+                              "Without this, NSFW-gated mods always report 0 comments regardless "
+                              "of their real count.")
     args = parser.parse_args()
 
     mod_list = load_mod_list()
@@ -339,7 +351,7 @@ def main():
                                     # better to stop loudly than silently grind through the rest
                                     # of an unattended multi-hour run collecting nothing.
     with sync_playwright() as p:
-        browser, context = open_browser_context(p, headless=args.headless)
+        browser, context = open_browser_context(p, headless=args.headless, auth_state=args.auth_state)
 
         with open(OUTPUT_FILE, mode, encoding="utf-8") as out:
             for i, mod in enumerate(todo, 1):
