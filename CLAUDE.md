@@ -139,22 +139,49 @@ fully expose.
   attempt less likely to succeed, not more. Do not debug this the way this
   session did (many browser launches in quick succession); it likely made
   things worse each time.
-  **Next session: let it sit for a genuinely long cooldown (hours, not
-  tens of minutes) before touching nexusmods.com at all. Then test with
-  exactly ONE page load (not a `--limit N` script run, which is itself
-  several-to-many requests once comment pagination kicks in).**
-  - **v1.4 (2026-07-21, UNTESTED): switched to `headless=False`** — a real
-    browser window instead of headless Chromium. Cloudflare bot management
-    is known to fingerprint headless Chrome specifically (missing browser
-    internals, `navigator.webdriver`, etc.), which is a separate signal
-    from the volume/IP-scoring theory above. This is a plausible
-    contributing fix, not a replacement for the cooldown — test it only
-    once the cooldown has actually elapsed, starting with one page load.
-  - If a single cold request with a headed browser still fails, other
-    candidates: a residential/rotating IP, or a TLS-fingerprint-matching
-    HTTP client like `curl_cffi` (mint `cf_clearance` once via Playwright,
-    reuse it through a fingerprint-matched HTTP client instead of a fresh
-    browser page per mod — faster too, if it works).
+  **UPDATE (2026-07-21, ~2hrs later): tested again, same result, and this
+  now looks structural rather than a lingering effect of the original
+  debugging session.** After a genuine ~2-hour gap with zero requests to
+  nexusmods.com, a single manual page load with `headless=False` (v1.4)
+  succeeded cleanly on mod 366 (ImpUI). Within roughly a minute, running
+  `py nexus_deep_comments.py --limit 1` against **that same mod** failed
+  every retry attempt (80s of backoff, all exhausted).
+  This is the third independent confirmation of the same shape: a lone,
+  isolated request tends to succeed; anything that follows it soon after
+  — regardless of headless vs headed, regardless of route-blocking on/off,
+  regardless of fresh-page-per-mod vs reused-page — fails. Three different
+  code-level variables have now been tried and ruled out as the primary
+  cause. What hasn't varied across any of these tests: the source IP, and
+  the fact that requests keep coming in quick succession relative to each
+  other. **Read this as frequency/volume-based scoring on this IP, not a
+  browser-fingerprint or headless-detection problem** — those are still
+  probably contributing factors, but not sufficient to explain the pattern
+  alone.
+  Practical implication: a 2-hour cooldown is enough for *one* request to
+  clear, but not enough headroom to run even a single mod's full comment
+  pagination (which is itself multiple sequential requests a few seconds
+  apart) without tripping back into the same state. If this holds, scraping
+  3,661 mods — each needing 1 to (for popular mods) 100+ sequential
+  requests — may not be practical from this IP at any patience level using
+  this approach, or would require per-request delays long enough to make
+  a full sweep take an impractically long time (weeks+, unverified).
+  **Options going forward (unranked, none tested yet):**
+  - A genuinely different source IP (mobile hotspot, VPN, proxy) — the
+    most direct test of the "is this really IP-bound" theory, and the
+    likely real fix if so.
+  - `curl_cffi` (TLS-fingerprint-matching HTTP client) reusing a
+    Playwright-minted `cf_clearance` — untested whether this changes
+    anything if the block truly is frequency-based rather than
+    fingerprint-based.
+  - Drastically slower pacing (e.g. one request every several minutes) —
+    only worth trying if the scoring window turns out to be short; would
+    need a live test to find the actual safe interval, which itself costs
+    more attempts against an already-suspicious IP.
+  - Revisit the GraphQL API (`api.nexusmods.com/v2/graphql`) as a
+    differently-protected path — still unvalidated from the original
+    investigation.
+  - Reconsider scope: e.g. hand-scrape or spot-check only the highest-value
+    mods rather than all 3,661, if a reliable bulk method doesn't pan out.
 - Parsing logic (`parse_comments`) itself is validated — it's the same
   BeautifulSoup extraction shape confirmed against real response HTML
   during the investigation phase, unrelated to the auth issue above.
