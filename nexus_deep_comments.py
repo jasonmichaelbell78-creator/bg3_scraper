@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.3  (investigation 2026-07-21, see CLAUDE.md)
+nexus_deep_comments.py  v1.4  (investigation 2026-07-21, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -46,6 +46,12 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   not tens of minutes), then test with exactly ONE page load, not a
   --limit N script run (which is itself several-to-many requests once
   comment pagination is included).
+  v1.4 switches launch(headless=True) -> headless=False. Cloudflare's bot
+  management is known to fingerprint headless Chrome specifically (missing
+  browser internals, navigator.webdriver, etc.), which is a separate signal
+  from the volume/IP-scoring theory above -- this doesn't replace the need
+  for a long cooldown, it's an additional variable to test once the cooldown
+  has actually elapsed. UNTESTED against the live site as of this edit.
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -117,7 +123,11 @@ def load_mod_list() -> list[dict]:
 
 
 def open_browser_context(playwright):
-    browser = playwright.chromium.launch(headless=True)
+    # Non-headless: Cloudflare's bot management fingerprints headless Chrome
+    # (missing browser internals, navigator.webdriver, etc.) separately from
+    # whatever IP/volume-based scoring caused the v1.3 failures -- this is
+    # untested against the real site as of writing (see CLAUDE.md cooldown note).
+    browser = playwright.chromium.launch(headless=False)
     context = browser.new_context(user_agent=UA)
     return browser, context
 

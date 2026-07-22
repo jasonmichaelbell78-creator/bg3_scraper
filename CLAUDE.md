@@ -107,7 +107,7 @@ fully expose.
 ## `nexus_deep_comments.py` — build status (2026-07-21, UNRESOLVED)
 - Written, mirrors `modio_deep_comments.py`'s shape but had to diverge on
   auth after several failed approaches — full story is in the script's own
-  docstring (v1.3). Short version:
+  docstring (v1.4). Short version:
   - v1.0 (mod.io pattern: mint cookies once, hand off to `requests`) — 403s
     every time. Confirmed why: see "Auth/cookies" note above.
   - v1.1 (keep one Playwright *page* open, `page.goto()` per mod) — first
@@ -142,11 +142,19 @@ fully expose.
   **Next session: let it sit for a genuinely long cooldown (hours, not
   tens of minutes) before touching nexusmods.com at all. Then test with
   exactly ONE page load (not a `--limit N` script run, which is itself
-  several-to-many requests once comment pagination kicks in).** If a single
-  cold request still fails, the approach needs to change (candidates: a
-  real non-headless browser, a residential/rotating IP, or a
-  TLS-fingerprint-matching HTTP client like `curl_cffi` instead of
-  Playwright-for-everything).
+  several-to-many requests once comment pagination kicks in).**
+  - **v1.4 (2026-07-21, UNTESTED): switched to `headless=False`** — a real
+    browser window instead of headless Chromium. Cloudflare bot management
+    is known to fingerprint headless Chrome specifically (missing browser
+    internals, `navigator.webdriver`, etc.), which is a separate signal
+    from the volume/IP-scoring theory above. This is a plausible
+    contributing fix, not a replacement for the cooldown — test it only
+    once the cooldown has actually elapsed, starting with one page load.
+  - If a single cold request with a headed browser still fails, other
+    candidates: a residential/rotating IP, or a TLS-fingerprint-matching
+    HTTP client like `curl_cffi` (mint `cf_clearance` once via Playwright,
+    reuse it through a fingerprint-matched HTTP client instead of a fresh
+    browser page per mod — faster too, if it works).
 - Parsing logic (`parse_comments`) itself is validated — it's the same
   BeautifulSoup extraction shape confirmed against real response HTML
   during the investigation phase, unrelated to the auth issue above.
