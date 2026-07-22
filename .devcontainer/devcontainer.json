@@ -1,0 +1,16 @@
+{
+  "name": "BG3 Scraper (Nexus + mod.io)",
+  "image": "mcr.microsoft.com/devcontainers/python:3.12",
+  "features": {
+    "ghcr.io/devcontainers/features/desktop-lite:1": {}
+  },
+  "postCreateCommand": "pip install --user -r requirements.txt && python -m playwright install --with-deps chromium",
+  "remoteEnv": {
+    "PYTHONUNBUFFERED": "1"
+  },
+  "customizations": {
+    "vscode": {
+      "extensions": ["ms-python.python"]
+    }
+  }
+}

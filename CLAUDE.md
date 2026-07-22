@@ -139,13 +139,44 @@ fully expose.
   need revisiting (virtual display, etc.) for unattended/headless
   execution later if that becomes necessary.
 
-## Next steps (from home)
+## Running from work: GitHub Codespaces (2026-07-22)
+- Discovered the Mimecast block is **device/agent-level, not network-level**
+  — it follows the laptop regardless of which network (work wifi, home wifi,
+  mobile hotspot, personal VPN) it's connected to, and staying on the work
+  network is required anyway for other work programs. Switching networks is
+  not a viable workaround.
+- Fix: run the actual browser/scrape entirely off-device, in a GitHub
+  Codespace. The laptop only ever talks to `github.dev`/`vscode.dev` over
+  HTTPS (the web IDE); the Codespace container itself (in Azure) makes the
+  `nexusmods.com` requests, so the Mimecast agent on the laptop never sees
+  that traffic at all. This is a different mechanism than "switch networks"
+  — the traffic never touches the laptop's network stack in the first place.
+- Added `.devcontainer/devcontainer.json`: Python 3.12 base image, the
+  `desktop-lite` devcontainer feature (Xvfb + a lightweight desktop reachable
+  over noVNC), `postCreateCommand` installs `requirements.txt` and runs
+  `playwright install --with-deps chromium`. The Xvfb desktop means the
+  script's default headed (`headless=False`) launch works unmodified in a
+  Codespace with no physical display.
+- Added a `--headless` flag to `nexus_deep_comments.py` (v1.6) so headless
+  mode itself can finally be tested against the live site — the v1.4 note
+  above theorized headed-vs-headless wasn't the actual Cloudflare signal
+  (the `navigator.webdriver` patch was), but that was never confirmed
+  headless against production. Default behavior (headed) is unchanged for
+  existing home-network runs.
+- **Not yet validated**: none of this (Codespace container itself, Xvfb
+  desktop, whether Cloudflare treats Azure's IP range differently than a
+  home residential IP) has been tested live yet. See testing procedure
+  below before committing to the full sweep.
+
+## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
    pattern, and HTML shape identified.
 3. ~~Build and validate `nexus_deep_comments.py`~~ Done (v1.5) — see
    build-status section above.
-4. Run the full sweep (`py nexus_deep_comments.py`, all 3,661 mods minus
+4. Validate the Codespaces setup (see testing procedure) — unconfirmed as of
+   2026-07-22.
+5. Run the full sweep (`py nexus_deep_comments.py`, all 3,661 mods minus
    Mod Fixer) and merge into a `nexus_comments_merged.jsonl` analogous to
    the mod.io merge. Not yet started — full run will take a while (popular
    mods can be thousands of comments across hundreds of sequential

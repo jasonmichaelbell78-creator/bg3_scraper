@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.5  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.6  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -76,6 +76,11 @@ USAGE:
   py nexus_deep_comments.py
   py nexus_deep_comments.py --limit 5     # test on first 5 mods
   py nexus_deep_comments.py --resume      # skip mods already in the output file
+  py nexus_deep_comments.py --headless    # run headless instead of the default headed window
+                                           # (see .devcontainer/ for running this in GitHub Codespaces,
+                                           # which has no real network-level path to nexusmods.com --
+                                           # a virtual desktop (Xvfb via the desktop-lite devcontainer
+                                           # feature) is provided so headed mode also works there)
 ================================================================================
 """
 
@@ -122,14 +127,14 @@ def load_mod_list() -> list[dict]:
     return mods
 
 
-def open_browser_context(playwright):
+def open_browser_context(playwright, headless: bool = False):
     # A vanilla playwright.chromium.launch() reports navigator.webdriver = True
     # -- confirmed locally (2026-07-22) and almost certainly the real cause of
     # the challenges seen in v1.0-v1.4, not headless state or IP/volume scoring:
     # the working Playwright MCP browser used during this whole investigation
     # reports navigator.webdriver = False. Patch it the standard way, before
     # any page script runs.
-    browser = playwright.chromium.launch(headless=False)
+    browser = playwright.chromium.launch(headless=headless)
     context = browser.new_context(user_agent=UA)
     context.add_init_script("Object.defineProperty(navigator, 'webdriver', { get: () => false });")
     return browser, context
@@ -288,6 +293,11 @@ def main():
     parser = argparse.ArgumentParser()
     parser.add_argument("--limit", type=int, default=0, help="Only process the first N mods (0 = all)")
     parser.add_argument("--resume", action="store_true", help="Skip mods already present in the output file")
+    parser.add_argument("--headless", action="store_true",
+                         help="Launch Chromium headless instead of the default headed window "
+                              "(untested against live Cloudflare as of v1.5 -- the navigator.webdriver "
+                              "patch is believed to be the real fix, not headed state, but this has "
+                              "never actually been run headless against the live site)")
     args = parser.parse_args()
 
     mod_list = load_mod_list()
@@ -311,7 +321,7 @@ def main():
 
     written = 0
     with sync_playwright() as p:
-        browser, context = open_browser_context(p)
+        browser, context = open_browser_context(p, headless=args.headless)
 
         with open(OUTPUT_FILE, mode, encoding="utf-8") as out:
             for i, mod in enumerate(todo, 1):
