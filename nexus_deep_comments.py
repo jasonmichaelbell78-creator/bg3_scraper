@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.9  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.10  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -52,6 +52,20 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   from the volume/IP-scoring theory above -- this doesn't replace the need
   for a long cooldown, it's an additional variable to test once the cooldown
   has actually elapsed. UNTESTED against the live site as of this edit.
+  v1.10 (2026-07-23, full 3,661-mod sweep post-mortem): two large/popular
+  mods (279, 22659) failed identically -- "Cloudflare challenge persisted
+  after 3 attempts" -- across three independent sessions (the main sweep
+  plus two separate --mod-ids retries), while every other mod that failed
+  once cleared on a later retry. The old fetch_with_retry() restarted a
+  failed mod entirely from scratch (fresh thread-id lookup, pagination back
+  to page 1) on every attempt, discarding any comments already collected.
+  Combined with the v1.3 volume/burst-triggered-challenge finding, that
+  means a mod with enough pages to trip the heuristic before finishing one
+  full pass could never succeed, no matter how many retries -- every
+  attempt re-spends the same budget getting back to the same failure point.
+  Fix: fetch_comment_page_resilient() retries an individual failing page in
+  place (backoff + fresh page, same page_num) instead of the whole mod, so
+  partial pagination progress from earlier pages is never thrown away.
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -236,10 +250,35 @@ def fetch_comment_page(page: Page, mod_id: int, thread_id: str, page_num: int) -
     return result["text"]
 
 
+def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], mod_id: int,
+                                  thread_id: str, page_num: int) -> str:
+    """Fetches one AJAX comment page. On a Cloudflare challenge, backs off and swaps in a
+    fresh page (page_box[0]) before retrying the SAME page_num -- unlike fetch_with_retry's
+    whole-mod restart, this doesn't discard comments already collected from earlier pages,
+    since that accumulator lives in the caller (fetch_all_comments), not here.
+    Added after 279 and 22659 (both large, popular mods) failed identically across three
+    separate sweep/retry sessions while every other mod eventually cleared -- consistent
+    with the v1.3 finding that Cloudflare's challenge is volume/burst-triggered: a mod with
+    enough pages to trip that heuristic before finishing a full top-to-bottom pass could
+    never succeed under the old scheme, since every retry restarted at page 1 and re-spent
+    the same request budget getting back to the same place it failed before."""
+    for attempt, backoff in enumerate(CHALLENGE_BACKOFFS, start=1):
+        if backoff:
+            print(f"    page {page_num}: Cloudflare challenge, backing off {backoff}s (attempt {attempt})...")
+            time.sleep(backoff)
+        try:
+            return fetch_comment_page(page_box[0], mod_id, thread_id, page_num)
+        except PermissionError:
+            page_box[0].close()
+            page_box[0] = new_page(context)
+            continue
+    raise PermissionError(f"Cloudflare challenge persisted after {len(CHALLENGE_BACKOFFS)} attempts on page {page_num}")
+
+
 def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
-    page = new_page(context)
+    page_box = [new_page(context)]
     try:
-        first_page_html = fetch_mod_posts_page(page, mod_id)
+        first_page_html = fetch_mod_posts_page(page_box[0], mod_id)
 
         thread_match = THREAD_ID_RE.search(first_page_html)
         if not thread_match:
@@ -263,7 +302,7 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
         # on the number of top-level pages -- real stopping signal is an empty page.
         max_pages = reported_count + 1
         while page_num <= max_pages:
-            html = fetch_comment_page(page, mod_id, thread_id, page_num)
+            html = fetch_comment_page_resilient(context, page_box, mod_id, thread_id, page_num)
             batch = parse_comments(html)
             new_ids = [c for c in batch if c["comment_id"] not in seen_ids]
             if not new_ids:
@@ -278,7 +317,7 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
             c["thread_id"] = thread_id
         return comments
     finally:
-        page.close()
+        page_box[0].close()
 
 
 CHALLENGE_BACKOFFS = (0, 20, 60)  # seconds before each attempt; first attempt has no wait
