@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.10  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.11  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -321,12 +321,20 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
 
 
 CHALLENGE_BACKOFFS = (0, 20, 60)  # seconds before each attempt; first attempt has no wait
+# For mods that fail even the short backoffs on the very first page load rather than
+# mid-pagination (279, 22659 -- see v1.10 note above): failing at fetch_mod_posts_page()
+# on a brand-new page/context means this isn't the mid-pagination burst pattern
+# fetch_comment_page_resilient() was built for, and 20s/60s clearly isn't enough room for
+# whatever's gating these specific pages. Opt-in via --long-backoff for a dedicated retry
+# after a real cooldown -- not for blind immediate re-runs, which the v1.3 note above found
+# just burn more of the same budget without helping.
+LONG_CHALLENGE_BACKOFFS = (0, 60, 180, 300, 600)
 
 
-def fetch_with_retry(context: BrowserContext, mod_id: int) -> list[dict]:
+def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BACKOFFS) -> list[dict]:
     """Like fetch_all_comments, but retries with backoff on a Cloudflare challenge.
     FileNotFoundError (mod deleted) still propagates immediately, uncaught."""
-    for attempt, backoff in enumerate(CHALLENGE_BACKOFFS, start=1):
+    for attempt, backoff in enumerate(backoffs, start=1):
         if backoff:
             print(f"  Cloudflare challenge re-triggered, backing off {backoff}s (attempt {attempt})...")
             time.sleep(backoff)
@@ -334,7 +342,7 @@ def fetch_with_retry(context: BrowserContext, mod_id: int) -> list[dict]:
             return fetch_all_comments(context, mod_id)
         except PermissionError:
             continue
-    raise PermissionError(f"Cloudflare challenge persisted after {len(CHALLENGE_BACKOFFS)} attempts")
+    raise PermissionError(f"Cloudflare challenge persisted after {len(backoffs)} attempts")
 
 
 def main():
@@ -357,7 +365,16 @@ def main():
                               "with 'Show adult content' enabled (see nexus_login_capture.py). "
                               "Without this, NSFW-gated mods always report 0 comments regardless "
                               "of their real count.")
+    parser.add_argument("--long-backoff", action="store_true",
+                         help="Use much longer backoffs (up to 10 min) between whole-mod retry "
+                              "attempts, up from the default 20s/60s. For mods that keep failing "
+                              "on the very first page load rather than mid-pagination (see 279/"
+                              "22659 in the v1.10 docstring note) -- makes a run much slower per "
+                              "failing mod, so only use it for a small --mod-ids list of known-"
+                              "stubborn mods after letting them cool down, not the full sweep.")
     args = parser.parse_args()
+
+    backoffs = LONG_CHALLENGE_BACKOFFS if args.long_backoff else CHALLENGE_BACKOFFS
 
     mod_list = load_mod_list()
     if args.mod_ids:
@@ -397,7 +414,7 @@ def main():
                 mod_id, name = mod["mod_id"], mod["name"]
                 now = datetime.now(timezone.utc).isoformat()
                 try:
-                    comments = fetch_with_retry(context, mod_id)
+                    comments = fetch_with_retry(context, mod_id, backoffs)
                 except FileNotFoundError:
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}): mod not found, skipping")
                     # Sentinel line so --resume treats this mod as done, not "never tried" --
