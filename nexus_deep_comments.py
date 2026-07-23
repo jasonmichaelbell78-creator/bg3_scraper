@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.11  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.12  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -66,6 +66,20 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   Fix: fetch_comment_page_resilient() retries an individual failing page in
   place (backoff + fresh page, same page_num) instead of the whole mod, so
   partial pagination progress from earlier pages is never thrown away.
+  v1.12 (2026-07-23): live-captured mod 97's anonymous HTML and found an
+  unambiguous, site-authored marker for the adult-content preference gate --
+  <h3 id="Notice9216-title">Adult content disabled</h3> plus a paragraph
+  ("This page is hidden because adult content is turned off in your
+  preferences..."). Before this, a mod hidden by that gate and a mod that
+  genuinely has zero comments were indistinguishable -- both hit the "no
+  thread_id found" branch and returned []. Now that branch checks for
+  ADULT_GATE_MARKER first and raises NSFWGatedError, which main() writes as
+  a distinct `_status: "nsfw_gated"` sentinel instead of `"no_comments"`.
+  Also added --output to redirect the output file, so the existing
+  no_comments mods can be re-checked into a separate file (reclassifying
+  nsfw_gated ones) without --resume's "already done" skip logic getting in
+  the way, and without --resume's absence silently truncating the real
+  sweep output (mode defaults to "w" without --resume).
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -101,6 +115,12 @@ USAGE:
                                            # re-check specific mods with a logged-in, adult-content-
                                            # enabled session (see nexus_login_capture.py) instead of
                                            # the default anonymous one
+  py nexus_deep_comments.py --mod-ids 4752,6045 --output nsfw_recheck.jsonl
+                                           # re-check specific mods into a SEPARATE output file --
+                                           # needed for the no_comments -> nsfw_gated reclassification
+                                           # pass, since --resume against the main sweep file would
+                                           # just skip mods that already have any sentinel, and
+                                           # omitting --resume against the main file would truncate it
 ================================================================================
 """
 
@@ -134,6 +154,19 @@ EXCLUDED_MOD_IDS = {141}
 THREAD_ID_RE = re.compile(r'thread_id["\s:=]+"?(\d+)"?')
 COMMENT_COUNT_RE = re.compile(r'data-comment-count="(\d+)"')
 CHALLENGE_MARKERS = ("Just a moment", "cf-mitigated")
+# Site-authored copy shown in place of the Posts tab when the viewer's session hasn't
+# opted into adult content -- confirmed live on mod 97 (2026-07-23):
+#   <h3 id="Notice9216-title">Adult content disabled</h3>
+#   <p id="Notice9216-paragraph">This page is hidden because adult content is turned
+#   off in your preferences...
+# Distinguishes "hidden by the NSFW gate" from "genuinely has zero comments" -- both
+# otherwise produce the same "no thread_id found" result with no way to tell them apart.
+ADULT_GATE_MARKER = "Adult content disabled"
+
+
+class NSFWGatedError(Exception):
+    """Raised when a mod's Posts tab is hidden by Nexus's adult-content preference gate
+    (anonymous/non-opted-in session), not because the mod genuinely has zero comments."""
 
 
 def load_mod_list() -> list[dict]:
@@ -282,6 +315,8 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
 
         thread_match = THREAD_ID_RE.search(first_page_html)
         if not thread_match:
+            if ADULT_GATE_MARKER in first_page_html:
+                raise NSFWGatedError("adult content preference gate")
             return []  # no Posts/comments on this mod
         thread_id = thread_match.group(1)
 
@@ -372,9 +407,15 @@ def main():
                               "22659 in the v1.10 docstring note) -- makes a run much slower per "
                               "failing mod, so only use it for a small --mod-ids list of known-"
                               "stubborn mods after letting them cool down, not the full sweep.")
+    parser.add_argument("--output", type=str, default=None,
+                         help="Override the output file path (default: nexus_comments_deep_sweep.jsonl). "
+                              "Useful for a targeted re-check pass (e.g. --mod-ids against the mods "
+                              "currently recorded as no_comments, to reclassify nsfw_gated ones) "
+                              "without touching or clobbering the main sweep's output file.")
     args = parser.parse_args()
 
     backoffs = LONG_CHALLENGE_BACKOFFS if args.long_backoff else CHALLENGE_BACKOFFS
+    output_file = Path(args.output) if args.output else OUTPUT_FILE
 
     mod_list = load_mod_list()
     if args.mod_ids:
@@ -386,8 +427,8 @@ def main():
 
     done_ids: set[int] = set()
     mode = "w"
-    if args.resume and OUTPUT_FILE.exists():
-        with open(OUTPUT_FILE, encoding="utf-8") as f:
+    if args.resume and output_file.exists():
+        with open(output_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
@@ -409,7 +450,7 @@ def main():
     with sync_playwright() as p:
         browser, context = open_browser_context(p, headless=args.headless, auth_state=args.auth_state)
 
-        with open(OUTPUT_FILE, mode, encoding="utf-8") as out:
+        with open(output_file, mode, encoding="utf-8") as out:
             for i, mod in enumerate(todo, 1):
                 mod_id, name = mod["mod_id"], mod["name"]
                 now = datetime.now(timezone.utc).isoformat()
@@ -420,6 +461,12 @@ def main():
                     # Sentinel line so --resume treats this mod as done, not "never tried" --
                     # otherwise a 404'd mod gets re-fetched (and re-404s) on every future resume.
                     out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, "_status": "not_found"},
+                                          ensure_ascii=False) + "\n")
+                    out.flush()
+                    continue
+                except NSFWGatedError:
+                    print(f"[{i}/{len(todo)}] {name} ({mod_id}): NSFW-gated (adult content preference), skipping")
+                    out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, "_status": "nsfw_gated"},
                                           ensure_ascii=False) + "\n")
                     out.flush()
                     continue
@@ -451,7 +498,7 @@ def main():
 
         browser.close()
 
-    print(f"\nDone. {written} comments written to {OUTPUT_FILE}")
+    print(f"\nDone. {written} comments written to {output_file}")
 
 
 if __name__ == "__main__":
