@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.12  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.13  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -80,6 +80,16 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   nsfw_gated ones) without --resume's "already done" skip logic getting in
   the way, and without --resume's absence silently truncating the real
   sweep output (mode defaults to "w" without --resume).
+  v1.13 (2026-07-23, costly lesson): the v1.12 "mode defaults to w without
+  --resume" behavior above is exactly what destroyed the entire ~3,657-mod
+  sweep output. Three separate --mod-ids retry commands were run against
+  the main output file without --resume; each one silently truncated it
+  before writing, and the last of the three (both target mods failing,
+  nothing written back) left the file completely empty. Fix: the output
+  file is now opened in append mode whenever it already exists, full stop
+  -- --resume no longer controls file mode at all, only whether already-
+  recorded mod_ids get skipped from the todo list. Forgetting --resume now
+  produces duplicate rows for reprocessed mods at worst, never data loss.
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -425,15 +435,20 @@ def main():
     elif args.limit:
         mod_list = mod_list[: args.limit]
 
+    # Always append if the output file already exists -- only a brand-new file gets
+    # "w". Forgetting --resume on a later --mod-ids run used to silently truncate the
+    # whole file back to empty (lost the entire ~3,657-mod sweep this way, 2026-07-23,
+    # see CLAUDE.md); now the worst a forgotten --resume can do is duplicate rows for
+    # whatever mods get reprocessed, not destroy everything else.
+    mode = "a" if output_file.exists() else "w"
+
     done_ids: set[int] = set()
-    mode = "w"
     if args.resume and output_file.exists():
         with open(output_file, encoding="utf-8") as f:
             for line in f:
                 line = line.strip()
                 if line:
                     done_ids.add(json.loads(line)["mod_id"])
-        mode = "a"
 
     todo = [m for m in mod_list if m["mod_id"] not in done_ids]
     print(f"Mods in tier list (excluding Mod Fixer): {len(mod_list)}")
