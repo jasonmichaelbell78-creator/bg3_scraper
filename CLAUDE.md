@@ -225,6 +225,31 @@ fully expose.
     single-mod Cloudflare challenges that clear on retry, e.g. mod 3483
     Extra Gear failed all 3 attempts and will be retried by a future
     `--resume` since no sentinel gets written for real failures).
+  - **Full sweep DONE, 2026-07-23**: completed at 3,661/3,661 processed (mod
+    141 excluded). 4 mods failed the main pass (3483, 279, 22659, 18542).
+    3483 and 18542 cleared on a `--mod-ids` retry. **279 and 22659 remained
+    stuck across three independent attempts (main sweep + two retries),
+    always failing at the very first page load** (`fetch_mod_posts_page`),
+    not mid-pagination — a different failure mode than the mid-run,
+    volume-triggered challenges the retry logic was originally built around.
+    Two fixes attempted:
+    - v1.10: `fetch_comment_page_resilient()` retries an individual failing
+      *pagination* page in place (backoff + fresh page, same page number)
+      instead of restarting the whole mod from scratch — doesn't help
+      279/22659 specifically since they never get past the first page, but
+      is a real improvement for any future mod that fails mid-pagination.
+    - v1.11: `--long-backoff` (waits up to 10 min between whole-mod retry
+      attempts, vs. the default 20s/60s) for mods that fail on the very
+      first load. Tried against 279/22659 after this — still failed.
+    - **Decision: 279 and 22659 are an accepted gap (2/3,661 mods, 99.95%
+      coverage).** Leading theory: these are popular enough pages that
+      Cloudflare's traffic-based challenge mode triggers on them somewhat
+      independent of our own client behavior/reputation, rather than
+      anything fixable purely by retry pacing. Not investigated further —
+      diminishing returns for 2 mods out of 3,661. `nexus_comments_deep_sweep.jsonl`
+      has no rows for these two mod IDs at all (not even a sentinel), so a
+      future `--mod-ids 279,22659 --long-backoff` retry (after a long
+      cooldown) remains possible if it's ever worth revisiting.
 
 ## NSFW-gated mods: plan (not yet executed, 2026-07-22)
 - Confirmed gap: NSFW-tagged mods return 0 comments because Nexus hides the
@@ -315,14 +340,13 @@ everything scraped so far.
    build-status section above.
 4. ~~Validate the Codespaces setup~~ Done (2026-07-22) — headed works, headless
    confirmed broken, resume gap fixed, timing estimated at 4-8 hours.
-5. Run the full sweep (`nohup python3 nexus_deep_comments.py --resume
-   > sweep.log 2>&1 &`, all 3,661 mods minus Mod Fixer, resuming past the
-   44 mods already tested) and merge into a `nexus_comments_merged.jsonl`
-   analogous to the mod.io merge — though unlike mod.io there's no legacy
-   partial dataset to reconcile against, so this may end up being just a
-   filter pass that strips the `_status` sentinel bookkeeping lines rather
-   than a true merge. **In progress as of 2026-07-22** (launched via nohup,
-   see above).
+5. ~~Run the full sweep~~ **Done, 2026-07-23** — 3,659/3,661 mods have
+   comment data (real or a confirmed-empty sentinel); 279 and 22659 are an
+   accepted gap (see Codespaces-testing section above). Still to do: merge
+   into a `nexus_comments_merged.jsonl` analogous to the mod.io merge —
+   likely just a filter pass stripping the `_status` sentinel bookkeeping
+   lines rather than a true merge, since unlike mod.io there's no legacy
+   partial dataset to reconcile against. Not started.
 6. NSFW-gated mods (see dedicated section above): create a throwaway Nexus
    account, run `nexus_login_capture.py` from home once the main sweep is
    done, copy `nexus_auth_state.json` into the Codespace, then re-run
