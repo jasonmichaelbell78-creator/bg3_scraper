@@ -225,31 +225,52 @@ fully expose.
     single-mod Cloudflare challenges that clear on retry, e.g. mod 3483
     Extra Gear failed all 3 attempts and will be retried by a future
     `--resume` since no sentinel gets written for real failures).
-  - **Full sweep DONE, 2026-07-23**: completed at 3,661/3,661 processed (mod
-    141 excluded). 4 mods failed the main pass (3483, 279, 22659, 18542).
-    3483 and 18542 cleared on a `--mod-ids` retry. **279 and 22659 remained
-    stuck across three independent attempts (main sweep + two retries),
-    always failing at the very first page load** (`fetch_mod_posts_page`),
-    not mid-pagination — a different failure mode than the mid-run,
-    volume-triggered challenges the retry logic was originally built around.
-    Two fixes attempted:
+  - **Full sweep completed 2026-07-23, then completely lost same day.**
+    First pass finished at 3,661/3,661 processed (mod 141 excluded); 4 mods
+    failed the main pass (3483, 279, 22659, 18542). 3483 and 18542 cleared
+    on a `--mod-ids` retry. 279 and 22659 stayed stuck across three separate
+    attempts, always failing at the very first page load
+    (`fetch_mod_posts_page`) rather than mid-pagination -- a different
+    failure mode than the volume-triggered mid-run challenges the retry
+    logic was built around. Two fixes were tried for them:
     - v1.10: `fetch_comment_page_resilient()` retries an individual failing
-      *pagination* page in place (backoff + fresh page, same page number)
-      instead of restarting the whole mod from scratch — doesn't help
-      279/22659 specifically since they never get past the first page, but
-      is a real improvement for any future mod that fails mid-pagination.
-    - v1.11: `--long-backoff` (waits up to 10 min between whole-mod retry
-      attempts, vs. the default 20s/60s) for mods that fail on the very
-      first load. Tried against 279/22659 after this — still failed.
-    - **Decision: 279 and 22659 are an accepted gap (2/3,661 mods, 99.95%
-      coverage).** Leading theory: these are popular enough pages that
-      Cloudflare's traffic-based challenge mode triggers on them somewhat
-      independent of our own client behavior/reputation, rather than
-      anything fixable purely by retry pacing. Not investigated further —
-      diminishing returns for 2 mods out of 3,661. `nexus_comments_deep_sweep.jsonl`
-      has no rows for these two mod IDs at all (not even a sentinel), so a
-      future `--mod-ids 279,22659 --long-backoff` retry (after a long
-      cooldown) remains possible if it's ever worth revisiting.
+      *pagination* page in place instead of restarting the whole mod --
+      doesn't help 279/22659 (they never get past the first page), but a
+      real improvement for any future mod that fails mid-pagination.
+    - v1.11: `--long-backoff` (up to 10 min between whole-mod retries, vs.
+      the default 20s/60s). Still failed against 279/22659 -- accepted as
+      a 2-mod gap at the time (popular pages plausibly triggering
+      Cloudflare's traffic-based challenge mode independent of our own
+      client reputation).
+  - **Then, same day: the entire ~3,657-mod dataset was accidentally
+    destroyed.** Three follow-up `--mod-ids` commands (the two retries
+    above, plus the 279/22659 `--long-backoff` attempt) were each run
+    *without* `--resume`. The script's mode logic at the time was `mode =
+    "w"` unless `--resume` was passed -- opening a file in `"w"` truncates
+    it to zero bytes the instant it's opened, before anything is written.
+    Each of the three commands silently wiped the file first, then wrote
+    back only whatever that one small run produced: 3,657 mods -> 19 lines
+    (18542 only) -> 781 lines (3483 only) -> 0 lines (279/22659 both
+    failed, nothing written back at all). Discovered only afterward, while
+    investigating why `nexus_nsfw_recheck.py` found zero `no_comments`
+    mods -- `wc -l nexus_comments_deep_sweep.jsonl` came back 0.
+    **Fix (v1.13): decoupled file mode from `--resume` entirely.** The
+    output file now opens in append mode whenever it already exists, full
+    stop -- `--resume` only controls whether already-recorded mod_ids get
+    skipped from the todo list, not file mode. Forgetting `--resume` can
+    now at worst duplicate rows for reprocessed mods, never erase
+    everything else. No data was permanently lost in principle (all of it
+    is still live on Nexus, just re-scrapeable), but the ~4-8 hour sweep
+    has to be run again from scratch. **Lesson for future sessions: always
+    download a local copy of `nexus_comments_deep_sweep.jsonl` (VS Code
+    Explorer -> right-click -> Download) periodically during a long run
+    and immediately after it completes** -- the Codespace's working copy
+    is not itself a backup.
+  - **Re-run in progress / to resume**: as of this loss, the sweep needs to
+    restart effectively from zero (the file is empty, so `--resume` will
+    correctly treat every mod as not-yet-done). Same launch command as the
+    original run applies. 279 and 22659 will need the same eventual
+    accepted-gap call as before if they still can't clear on this pass.
 
 ## NSFW-gated mods: plan (not yet executed, 2026-07-22)
 - Confirmed gap: NSFW-tagged mods return 0 comments because Nexus hides the
@@ -340,13 +361,24 @@ everything scraped so far.
    build-status section above.
 4. ~~Validate the Codespaces setup~~ Done (2026-07-22) — headed works, headless
    confirmed broken, resume gap fixed, timing estimated at 4-8 hours.
-5. ~~Run the full sweep~~ **Done, 2026-07-23** — 3,659/3,661 mods have
-   comment data (real or a confirmed-empty sentinel); 279 and 22659 are an
-   accepted gap (see Codespaces-testing section above). Still to do: merge
-   into a `nexus_comments_merged.jsonl` analogous to the mod.io merge —
-   likely just a filter pass stripping the `_status` sentinel bookkeeping
-   lines rather than a true merge, since unlike mod.io there's no legacy
-   partial dataset to reconcile against. Not started.
+5. Run the full sweep. **Completed once (2026-07-23), then accidentally
+   destroyed the same day** by follow-up commands that truncated the output
+   file (see the data-loss note in the Codespaces-testing section above) —
+   the underlying bug is fixed (v1.13, output file is now append-only once
+   it exists), but the sweep itself has to be run again from scratch.
+   **Not currently running as of 2026-07-23** — relaunch with the same
+   command as before: `nohup python3 nexus_deep_comments.py --resume
+   > sweep.log 2>&1 &` + `disown`. Since the file is empty, this will
+   reprocess all 3,661 mods (minus Mod Fixer) as if starting fresh; expect
+   279 and 22659 to need the same eventual accepted-gap call as last time.
+   **Download a local copy of the output file periodically during the run
+   and immediately after completion** (VS Code Explorer -> right-click ->
+   Download) — this is now the backup, since the Codespace's copy isn't one.
+   After a clean completion: merge into a `nexus_comments_merged.jsonl`
+   analogous to the mod.io merge — likely just a filter pass stripping the
+   `_status` sentinel bookkeeping lines rather than a true merge, since
+   unlike mod.io there's no legacy partial dataset to reconcile against.
+   Not started.
 6. NSFW-gated mods (see dedicated section above): create a throwaway Nexus
    account, run `nexus_login_capture.py` from home once the main sweep is
    done, copy `nexus_auth_state.json` into the Codespace, then re-run
