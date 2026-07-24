@@ -7,6 +7,25 @@ project closes is **comments/discussion threads**, which the APIs don't
 fully expose.
 
 ## Environment notes (this machine)
+- **Picking this project up on a NEW machine**: `git pull` gets all code/docs,
+  but three things are per-machine and gitignored, so they do NOT travel with
+  the repo and must be redone/recopied:
+  1. `.env` (real `MODIO_API_KEY`/`NEXUS_API_KEY` values) — copy `.env.example`
+     to `.env` and fill in real values (ask the user; not stored anywhere in
+     git history by design).
+  2. `gh auth login` (+ `gh auth refresh -h github.com -s codespace`) — the
+     Codespace itself is cloud-based and reachable from any machine once this
+     is done; no need to recreate it.
+  3. Large data files (`nexus_comments_deep_sweep.jsonl`,
+     `nexus_comments_merged.jsonl`, `modio_collections_*.jsonl`,
+     `nexus_collections_*.jsonl`, etc.) — gitignored, not on the Codespace
+     either once downloaded locally. Re-copy manually (zip) from the
+     previous machine, or re-run the relevant sweep script if the source
+     data is more convenient to regenerate than transfer.
+  Also worth checking early: whether this new machine has the same
+  device-level Mimecast block on `nexusmods.com` that motivated the whole
+  Codespace/Xvfb workaround below — if not, a lot of that indirection may be
+  unnecessary friction rather than a requirement.
 - Python is invoked as `py` (Python 3.14 launcher), not `python`/`python3`.
 - Installed: `requests`, `playwright` (+ Chromium browser via
   `py -m playwright install chromium`).
