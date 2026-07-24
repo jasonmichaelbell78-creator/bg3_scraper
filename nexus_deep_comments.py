@@ -349,7 +349,16 @@ def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], 
     raise PermissionError(f"Cloudflare challenge persisted after {len(CHALLENGE_BACKOFFS)} attempts on page {page_num}")
 
 
-def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
+def fetch_all_comments(context: BrowserContext, mod_id: int) -> tuple[list[dict], bool]:
+    """Returns (comments, complete). complete=False means pagination hit a Cloudflare
+    challenge that outlasted fetch_comment_page_resilient()'s retries -- comments holds
+    whatever was successfully gathered before that point, not the mod's full comment set.
+    Added 2026-07-24 rescuing mods 279/22659: previously a persistent mid-pagination
+    challenge raised PermissionError here, which fetch_with_retry() caught by restarting
+    the ENTIRE mod from page 1 -- discarding all comments already collected and re-walking
+    the same pages just to hit the same wall again, burning Cloudflare request "budget"
+    for zero net progress. Returning partial results instead means at least the pages
+    that did succeed aren't thrown away."""
     page_box = [new_page(context)]
     try:
         first_page_html = fetch_mod_posts_page(page_box[0], mod_id)
@@ -358,13 +367,13 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
         if not thread_match:
             if ADULT_GATE_MARKER in first_page_html:
                 raise NSFWGatedError("adult content preference gate")
-            return []  # no Posts/comments on this mod
+            return [], True  # no Posts/comments on this mod
         thread_id = thread_match.group(1)
 
         count_match = COMMENT_COUNT_RE.search(first_page_html)
         reported_count = int(count_match.group(1)) if count_match else 0
         if reported_count == 0:
-            return []
+            return [], True
 
         seen_ids = set()
         comments = []
@@ -377,8 +386,13 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
         # reported_count is total comments+replies, so it's a safe (loose) upper bound
         # on the number of top-level pages -- real stopping signal is an empty page.
         max_pages = reported_count + 1
+        complete = True
         while page_num <= max_pages:
-            html = fetch_comment_page_resilient(context, page_box, mod_id, thread_id, page_num)
+            try:
+                html = fetch_comment_page_resilient(context, page_box, mod_id, thread_id, page_num)
+            except PermissionError:
+                complete = False
+                break
             batch = parse_comments(html)
             new_ids = [c for c in batch if c["comment_id"] not in seen_ids]
             if not new_ids:
@@ -391,7 +405,7 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> list[dict]:
 
         for c in comments:
             c["thread_id"] = thread_id
-        return comments
+        return comments, complete
     finally:
         page_box[0].close()
 
@@ -407,8 +421,11 @@ CHALLENGE_BACKOFFS = (0, 20, 60)  # seconds before each attempt; first attempt h
 LONG_CHALLENGE_BACKOFFS = (0, 60, 180, 300, 600)
 
 
-def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BACKOFFS) -> list[dict]:
-    """Like fetch_all_comments, but retries with backoff on a Cloudflare challenge.
+def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BACKOFFS) -> tuple[list[dict], bool]:
+    """Like fetch_all_comments, but retries the WHOLE mod with backoff if the very first
+    page load hits a Cloudflare challenge (fetch_all_comments only raises PermissionError
+    for that case now -- a mid-pagination challenge is caught internally and returns a
+    partial, complete=False result instead, see fetch_all_comments's docstring).
     FileNotFoundError (mod deleted) still propagates immediately, uncaught."""
     for attempt, backoff in enumerate(backoffs, start=1):
         if backoff:
@@ -501,7 +518,7 @@ def main():
                 mod_id, name = mod["mod_id"], mod["name"]
                 now = datetime.now(timezone.utc).isoformat()
                 try:
-                    comments = fetch_with_retry(context, mod_id, backoffs)
+                    comments, complete = fetch_with_retry(context, mod_id, backoffs)
                 except FileNotFoundError:
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}): mod not found, skipping")
                     # Sentinel line so --resume treats this mod as done, not "never tried" --
@@ -530,6 +547,13 @@ def main():
                 if comments:
                     for c in comments:
                         out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, **c}, ensure_ascii=False) + "\n")
+                    if not complete:
+                        # Pagination hit a persistent Cloudflare challenge partway through --
+                        # comments holds everything gathered up to that point, not the full set.
+                        # Marker written alongside the real rows (not instead of them) so a
+                        # future pass can find and specifically re-target incomplete mods.
+                        out.write(json.dumps({"mod_id": mod_id, "_fetched_at": now, "_status": "partial",
+                                               "_comments_captured": len(comments)}, ensure_ascii=False) + "\n")
                 else:
                     # Same problem as the not_found case: a genuine zero-comment result (e.g. the
                     # NSFW preference gate) writes nothing, so --resume can't tell "done, confirmed
@@ -539,7 +563,8 @@ def main():
                                           ensure_ascii=False) + "\n")
                 out.flush()
                 written += len(comments)
-                print(f"[{i}/{len(todo)}] {name} ({mod_id}): {len(comments)} comments")
+                status_note = "" if complete else " (PARTIAL -- Cloudflare challenge mid-pagination)"
+                print(f"[{i}/{len(todo)}] {name} ({mod_id}): {len(comments)} comments{status_note}")
                 time.sleep(REQUEST_DELAY)
 
         browser.close()
