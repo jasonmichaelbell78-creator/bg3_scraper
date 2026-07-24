@@ -6,6 +6,67 @@ metadata/files/changelogs/dependencies for both sites. The actual gap this
 project closes is **comments/discussion threads**, which the APIs don't
 fully expose.
 
+## Repo layout (reorganized 2026-07-24 — see commit `8e6278c` for the full
+before/after and rationale; historical notes elsewhere in this file that
+mention old flat-root paths like `nexus_comments_deep_sweep.jsonl` or
+`Nexus/` are accurate for when they were written, just not the current
+on-disk location)
+- `scripts/` — every Python scraper/merger/utility, plus
+  `BG3_Nexus_Tier1_Tier2_Mods.csv` (the curated target list, tracked in git,
+  sits beside `nexus_deep_comments.py` since it's a script input, not
+  scraped output).
+- `data/` — all scraped output, entirely gitignored, organized by
+  platform/purpose:
+  - `data/modio/csv_sweep/` — `bg3_scraper.py`'s 8 CSVs (master/files/deps/
+    dets/comments/events/metas/teams).
+  - `data/modio/full_sweep/` — the mod.io deep-comments corpus:
+    `modio_mods_full_sweep.jsonl`, `modio_comments_fullsweep.jsonl`,
+    `modio_comments_deep_refresh.jsonl`, **`modio_comments_merged.jsonl`
+    (the one to use)**, plus deps/events/files/team/progress files.
+  - `data/modio/archive/` — standalone backup artifacts:
+    `bg3_modio_audit.db`, `bg3_modio_data.zip`,
+    `BG3_Modio_Normalized_Package_v0_1.zip`.
+  - `data/nexus/legacy_full_sweep/` — `nexus_bg3_scraper.py`'s June 2026
+    full sweep (16,191 mods: metadata/files/changelogs/dependencies).
+    Confirmed 2026-07-24 via a full Drive sweep (byte-identical file sizes
+    against the Drive-side `10_SOURCE_CORPORA/03_NEXUS_API_BASE_2026-06-28/`
+    copy) that this really is that script's own output, just renamed/moved
+    at some point — not a different script version, resolving an earlier
+    open question. The script's own `--output-dir` default (`./bg3_nexus_data`)
+    still doesn't point here by default; pass
+    `--output-dir data/nexus/legacy_full_sweep` explicitly if re-running it.
+  - `data/nexus/deep_comments/` — `nexus_comments_deep_sweep.jsonl` (raw)
+    and **`nexus_comments_merged.jsonl` (the one to use)**, plus
+    `nsfw_recheck.jsonl` once that script is run.
+  - `data/nexus/nexus_auth_state.json` — NSFW-capture login session, once
+    created (see the dedicated section below).
+  - `data/collections/modio/` and `data/collections/nexus/` — the
+    Collections sweep output.
+- `manifests/` — small tracked provenance docs (checksums, per-mod counts)
+  for the mod.io captures.
+- `Google Drive/` — untracked local mirror of a handful of shared control
+  docs pulled from the Drive project (roadmap, work delineation, checkpoint
+  policy, latest status doc) — **not** a full Drive sync, just what's been
+  manually pulled down so far.
+- `.env` / `.env.example` — stay at true repo root (real keys / placeholder
+  template) — Python convention, and nothing anchors them elsewhere.
+- `tools/`, `.claude/` — personal Claude Code tooling, not part of the
+  project itself (both gitignored).
+- Also deleted in the same reorg: ~500MB of confirmed-junk legacy folders
+  discovered while sourcing Drive data for it — an old, entirely forgotten
+  project snapshot with its own `.git` repo and `venv/` buried inside a
+  stray `BG3Scraper/` folder, a mis-copied duplicate folder, and a stale
+  241MB backup zip. None of it was referenced by anything active.
+
+**Correction (2026-07-24, found during a full Drive sweep)**: this file and
+a Drive status doc both claimed `nexus_comments_merged.jsonl` (230MB) was
+"manually uploaded to the Drive `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING`
+inbox" — checking that folder directly shows it's actually still empty. The
+file only landed in `30_SCRAPER_PROJECTS/BG3Scraper_Active/`, a location
+Codex likely isn't watching for new source corpora. Needs a copy into the
+real inbox folder before Codex's C5 conference point can rely on it being
+there.
+
 ## Environment notes (this machine)
 - **Picking this project up on a NEW machine**: `git pull` gets all code/docs,
   but three things are per-machine and gitignored, so they do NOT travel with
@@ -16,12 +77,12 @@ fully expose.
   2. `gh auth login` (+ `gh auth refresh -h github.com -s codespace`) — the
      Codespace itself is cloud-based and reachable from any machine once this
      is done; no need to recreate it.
-  3. Large data files (`nexus_comments_deep_sweep.jsonl`,
-     `nexus_comments_merged.jsonl`, `modio_collections_*.jsonl`,
-     `nexus_collections_*.jsonl`, etc.) — gitignored, not on the Codespace
-     either once downloaded locally. Re-copy manually (zip) from the
-     previous machine, or re-run the relevant sweep script if the source
-     data is more convenient to regenerate than transfer.
+  3. Large data files under `data/` (see "Repo layout" above for the current
+     subfolder scheme — e.g. `data/nexus/deep_comments/nexus_comments_merged.jsonl`,
+     `data/collections/modio/modio_collections_*.jsonl`, etc.) — gitignored,
+     not on the Codespace either once downloaded locally. Re-copy manually
+     (zip) from the previous machine, or re-run the relevant sweep script if
+     the source data is more convenient to regenerate than transfer.
   Also worth checking early: whether this new machine has the same
   device-level Mimecast block on `nexusmods.com` that motivated the whole
   Codespace/Xvfb workaround below — if not, a lot of that indirection may be
