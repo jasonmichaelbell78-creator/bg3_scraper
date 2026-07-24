@@ -23,11 +23,11 @@ from datetime import datetime, timezone
 from playwright.sync_api import sync_playwright
 
 from nexus_deep_comments import (
-    BASE_DIR, CHALLENGE_BACKOFFS, NSFWGatedError, fetch_with_retry, open_browser_context,
+    DATA_DIR, CHALLENGE_BACKOFFS, NSFWGatedError, fetch_with_retry, open_browser_context,
 )
 
-SWEEP_FILE = BASE_DIR / "nexus_comments_deep_sweep.jsonl"
-RECHECK_FILE = BASE_DIR / "nsfw_recheck.jsonl"
+SWEEP_FILE = DATA_DIR / "nexus_comments_deep_sweep.jsonl"
+RECHECK_FILE = DATA_DIR / "nsfw_recheck.jsonl"
 
 
 def main():

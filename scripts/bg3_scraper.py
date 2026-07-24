@@ -1,6 +1,8 @@
 import json
 import time
 import os
+from pathlib import Path
+
 import pandas as pd
 import requests
 
@@ -15,15 +17,19 @@ BASE_URL = f"https://g-{GAME_ID}.modapi.io/v1"
 HEADERS = {"X-Modio-Platform": "windows", "Accept-Language": "en", "Accept": "application/json"}
 
 # Filenames
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "modio" / "csv_sweep"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+
 FILES = {
-    "master": "bg3_master.csv",
-    "files": "bg3_files.csv",
-    "deps": "bg3_deps.csv",
-    "dets": "bg3_dets.csv",
-    "comments": "bg3_comments.csv",
-    "events": "bg3_events.csv",
-    "metas": "bg3_metas.csv",
-    "teams": "bg3_teams.csv"
+    "master": str(DATA_DIR / "bg3_master.csv"),
+    "files": str(DATA_DIR / "bg3_files.csv"),
+    "deps": str(DATA_DIR / "bg3_deps.csv"),
+    "dets": str(DATA_DIR / "bg3_dets.csv"),
+    "comments": str(DATA_DIR / "bg3_comments.csv"),
+    "events": str(DATA_DIR / "bg3_events.csv"),
+    "metas": str(DATA_DIR / "bg3_metas.csv"),
+    "teams": str(DATA_DIR / "bg3_teams.csv")
 }
 
 # ==========================================

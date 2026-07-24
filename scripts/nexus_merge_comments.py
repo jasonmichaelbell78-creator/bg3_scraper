@@ -37,9 +37,10 @@ import json
 from collections import Counter
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-SOURCE_FILE = BASE_DIR / "nexus_comments_deep_sweep.jsonl"
-MERGED_FILE = BASE_DIR / "nexus_comments_merged.jsonl"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "nexus" / "deep_comments"
+SOURCE_FILE = DATA_DIR / "nexus_comments_deep_sweep.jsonl"
+MERGED_FILE = DATA_DIR / "nexus_comments_merged.jsonl"
 
 
 def main():

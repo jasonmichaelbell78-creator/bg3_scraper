@@ -30,8 +30,8 @@ from pathlib import Path
 import requests
 from playwright.sync_api import sync_playwright
 
-BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "bg3_modio_data" / "bg3_modio_data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "modio" / "full_sweep"
 MODS_FILE = DATA_DIR / "modio_mods_full_sweep.jsonl"
 COMMENTS_FILE = DATA_DIR / "modio_comments_fullsweep.jsonl"
 OUTPUT_FILE = DATA_DIR / "modio_comments_deep_refresh.jsonl"

@@ -1,26 +1,21 @@
 # Large scraped datasets and archives -- kept local, carried between machines
 # as a zip rather than committed (size + Nexus API acceptable-use policy
-# discourages rehosting bulk API-sourced data publicly).
-bg3_modio_data/
-bg3_modio_data.zip
-BG3_Modio_Normalized_Package_v0_1.zip
-bg3_modio_audit.db
-Nexus/
-BG3Scraper.zip
-BG3Scraper/
-nexus_comments_deep_sweep.jsonl
-nexus_comments_merged.jsonl
-modio_collections_meta.jsonl
-modio_collections_mods.jsonl
-modio_collections_comments.jsonl
-nexus_collections_meta.jsonl
-nexus_collections_mods.jsonl
-nexus_collections_comments.jsonl
+# discourages rehosting bulk API-sourced data publicly). Everything under
+# data/ is gitignored regardless of subfolder.
+data/
+
+# nexus_bg3_scraper.py's own --output-dir default ("./bg3_nexus_data") is
+# CWD-relative and deliberately NOT anchored into data/ (a known follow-up
+# item -- see CLAUDE.md). Ignored explicitly here so a default-flags run
+# doesn't leave an unignored multi-hundred-MB directory at repo root.
+bg3_nexus_data/
+
 *.log
 
 # Secrets
 .env
-nexus_auth_state.json
+# nexus_auth_state.json now lives under data/nexus/ -- already covered by
+# the data/ pattern above.
 
 # Manually-synced local mirror of the shared Google Drive folder (Codex handoff)
 Google Drive/

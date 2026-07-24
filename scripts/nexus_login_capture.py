@@ -37,8 +37,10 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-BASE_DIR = Path(__file__).parent
-AUTH_STATE_FILE = BASE_DIR / "nexus_auth_state.json"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "nexus"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+AUTH_STATE_FILE = DATA_DIR / "nexus_auth_state.json"
 START_URL = "https://www.nexusmods.com/"
 
 

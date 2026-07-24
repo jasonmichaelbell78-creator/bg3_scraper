@@ -165,9 +165,12 @@ from pathlib import Path
 from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 
-BASE_DIR = Path(__file__).parent
-TIER_CSV = BASE_DIR / "BG3_Nexus_Tier1_Tier2_Mods.csv"
-OUTPUT_FILE = BASE_DIR / "nexus_comments_deep_sweep.jsonl"
+SCRIPT_DIR = Path(__file__).resolve().parent
+BASE_DIR = SCRIPT_DIR.parent  # repo root -- kept for any future consumers
+TIER_CSV = SCRIPT_DIR / "BG3_Nexus_Tier1_Tier2_Mods.csv"
+DATA_DIR = BASE_DIR / "data" / "nexus" / "deep_comments"
+DATA_DIR.mkdir(parents=True, exist_ok=True)
+OUTPUT_FILE = DATA_DIR / "nexus_comments_deep_sweep.jsonl"
 
 GAME_DOMAIN = "baldursgate3"
 GAME_ID = 3474

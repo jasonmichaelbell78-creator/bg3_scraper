@@ -19,8 +19,8 @@ Leaves modio_comments_fullsweep.jsonl untouched.
 import json
 from pathlib import Path
 
-BASE_DIR = Path(__file__).parent
-DATA_DIR = BASE_DIR / "bg3_modio_data" / "bg3_modio_data"
+BASE_DIR = Path(__file__).resolve().parent.parent
+DATA_DIR = BASE_DIR / "data" / "modio" / "full_sweep"
 OLD_FILE = DATA_DIR / "modio_comments_fullsweep.jsonl"
 REFRESH_FILE = DATA_DIR / "modio_comments_deep_refresh.jsonl"
 MERGED_FILE = DATA_DIR / "modio_comments_merged.jsonl"
