@@ -16,6 +16,20 @@ fully expose.
   machines as a manually-carried zip, not through git.
 - Repo: https://github.com/jasonmichaelbell78-creator/bg3_scraper (renamed
   from `bg3_nexus_scraper` — it's not Nexus-only anymore).
+- **Standing project directive (2026-07-24): keep Google Drive updated for
+  ChatGPT/Codex's use whenever there's a meaningful update, moving forward.**
+  Codex does not have GitHub access to this repo — its only visibility into
+  this project's state is the manually-synced Google Drive folder, so this
+  file being current on GitHub is not sufficient on its own. No Drive
+  file-update/delete tool exists (only create/copy), so each sync creates a
+  new file — use a clearly dated name, note in the new file's own text which
+  older file(s) it supersedes, and leave the superseded ones for the user to
+  clean up manually. Two locations matter: a full copy of this file goes in
+  `30_SCRAPER_PROJECTS/BG3Scraper_Active/` (buried, technical-detail copy),
+  and a short human-readable summary goes at the **top level** of the `BG3`
+  Drive folder (alongside `00_SHARED_PROJECT_ROADMAP.md` and
+  `01_CHATGPT_CLAUDE_WORK_DELINEATION.md`) — a file three folders deep is
+  not something Codex will ever think to look for on its own.
 - `gh` CLI: was missing/broken for a long time (wrapper pointed to a deleted
   path) — git operations used `git` directly with a cached Windows Credential
   Manager credential instead. **Fixed 2026-07-24**: reinstalled fresh from the
@@ -584,9 +598,9 @@ feeds into), but noted here so it isn't lost between sessions.
    wherever the next Nexus scraping session runs, then re-run
    `nexus_deep_comments.py --auth-state nexus_auth_state.json --mod-ids
    <the 205 nsfw_gated mod IDs> --output nsfw_capture.jsonl`.
-7. Collections on mod.io + Nexus (see dedicated section above) -- future
-   work, no priority set, needs live investigation before building anything.
-   Not started.
+7. Collections on mod.io + Nexus (see dedicated section above) -- **live
+   investigation done, both platforms confirmed fully scriptable** (2026-07-24).
+   Building the actual scraper scripts is the remaining step. Not started.
 8. Load Order Guidance doc research (see dedicated section above, cross-project) --
    Discord servers and Larian's official forums specifically, ideally via
    `claude-in-chrome` from a non-Mimecast-blocked machine. Not started this
