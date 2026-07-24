@@ -417,44 +417,110 @@ fully expose.
     still correctly come back empty, rather than first building a detector
     for "was this specifically the adult-content gate."
 
-## Future work: Collections (mod.io + Nexus) -- research only, 2026-07-22
-Not started, no priority set -- pick up after the main comments sweep (and
-its merge step) are done and stable. Both platforms have a "Collections"
-feature (curated bundles of mods) that's a separate data surface from
-everything scraped so far.
+## Collections (mod.io + Nexus): investigated live, CONFIRMED SCRIPTABLE, not yet built (2026-07-24)
+Both platforms' Collections feature (curated bundles of mods) is now fully
+verified scriptable for name/description/mod-list/comments — this was
+"research only, unknowns not yet resolved" as of 2026-07-22; today's session
+resolved every open question with real, live, verified requests (not doc
+summaries — see the WebFetch-hallucination note below for why that mattered).
 
-- **mod.io**: documented REST v1 endpoints exist --
-  `GET /games/:game-id/collections/:collection-id/mods`, plus
-  `get-mod-collections` / `get-mod-collection`. Same REST API
-  `bg3_scraper.py` already authenticates against with `MODIO_API_KEY`, so
-  this is likely a straightforward extension rather than a new
-  investigation. mod.io's own docs mention comments can be enabled/disabled
-  per-game for collections -- meaning there may be a *third* comments
-  surface (separate from mod comments) to eventually deal with here too.
-- **Nexus**: has an official GraphQL API at `graphql.nexusmods.com`,
-  purpose-built for Collections -- confirmed via Nexus's own open-source
-  `node-nexus-api` client library, which wraps it in a `getCollectionGraph()`
-  call keyed by collection slug (example only showed name/image fields, not
-  comments/revisions). This is a real, documented, sanctioned API surface --
-  a different animal from the reverse-engineered `CommentContainer` widget
-  the mod-comments work had to reverse-engineer.
-- **Amusing/relevant finding**: researching this live, a fetch to
-  `graphql.nexusmods.com` redirected through `ep-mimecast.nexusmods.com` and
-  landed on a literal `security-us.mimecast.com/.../blocked` page --
-  confirming Nexus fronts at least this subdomain with **Mimecast's own Secure
-  Web Gateway**, the same vendor (though presumably an unrelated deployment)
-  blocking `nexusmods.com` on the work network in the first place. Whatever
-  network ends up used to investigate this GraphQL API live will need to be
-  checked against that block too, separately from the Cloudflare-on-the-main-
-  site situation the comments work dealt with.
-- **Unknowns needing live investigation before building anything** (same
-  "go look live first" approach the comments work took, rather than building
-  against assumptions): what auth the GraphQL API actually wants (the
-  existing `NEXUS_API_KEY` REST v1 key, or something separate); whether
-  there's a curated list of BG3 collections anywhere or we'd need to
-  enumerate all collections for the BG3 game ID ourselves on each platform;
-  whether collection comments/discussion go through clean documented
-  endpoints or hit the same kind of gaps mod comments did.
+**Where the keys came from**: `MODIO_API_KEY`/`NEXUS_API_KEY` were not
+findable anywhere already checked (not this machine's env, not the
+Codespace's env, not the Google Drive `BG3Scraper_Active` mirror's files —
+all had only `.env.example` templates). The user placed real values in a
+local `env.example` file (no leading dot) in the repo root to hand them
+over. **That file is not gitignored as of this note — `env.example` (no
+dot) is a different filename than the gitignored `.env`/`.env.example`
+pattern** — rename/gitignore it before any commit touches the repo root,
+or move the real values into an actual `.env` (already gitignored).
+
+### mod.io Collections — fully scriptable, same key already in use
+- `GET https://g-6715.modapi.io/v1/games/6715/collections?api_key=...` —
+  list/search. Live-confirmed: **843 total BG3 collections** exist. Returns
+  rich metadata per collection: `name`, `summary`, `category`, `tags`,
+  `stats` (`downloads_total`, `followers_total`, `ratings_total`,
+  `mods_total`, **`comments_total`**), `logo`, dates.
+- `GET .../collections/{collection_id}/mods` — mod list for a collection
+  (same shape as the games/collections list endpoint from the original
+  2026-07-22 note — not re-verified live this session but very likely
+  correct given everything else on this host matched documentation exactly).
+- `GET .../collections/{collection_id}/comments` — **live-confirmed
+  working**, real comment data (id, `user`, `date_added`, `reply_id` for
+  threading, `karma`, `content`). **Pagination confirmed correct** —
+  `_offset`/`_limit` honored properly (tested offset=0/limit=3 then
+  offset=3/limit=3 against a 14-comment collection, zero overlap, matches
+  `result_total`) — no repeat of the original mod-comments silent-100-cap
+  bug. No Cloudflare/cookie dance needed at all for any of this, unlike mod
+  comments.
+- One dead end worth recording: a WebFetch summarization of mod.io's docs
+  page produced a **plausible but wrong/inconsistent** endpoint shape
+  (nesting collections under a specific mod_id) across two separate
+  fetches that partially contradicted each other and the correct shape
+  above — a real illustration of JS-rendered API doc pages being a
+  hallucination risk for summarization tools. mod.io's API also returns
+  401 (not 404) for made-up paths, so status-code probing without a key
+  couldn't settle it either. Only a real authenticated request settled it.
+
+### Nexus Collections — fully scriptable via the official GraphQL API, likely no auth needed
+- **The docs-serving host is not the query endpoint** — `graphql.nexusmods.com`
+  only serves an interactive SpectaQL documentation page (GET requests
+  return real, official, fully-detailed schema docs — reliable, unlike the
+  mod.io WebFetch summary, because this was read directly via curl+grep,
+  not LLM-summarized). POSTing a query there 405s with an empty body, which
+  looks like a dead end but isn't one. **The real endpoint is
+  `https://api.nexusmods.com/v2/graphql`** (same host as the existing REST
+  v1 API, just a v2/graphql path) — found via the docs page's own "API
+  Endpoints" section.
+- **No authentication required**, confirmed empirically (not just from the
+  docs' "most of GraphQL V2 is accessible without authentication" note) —
+  every query below worked with zero auth headers.
+- `collectionsV2(filter: {gameDomain: [{value: "baldursgate3"}]}, count: N)`
+  — list/search. Live-confirmed: **87 total BG3 collections**. Returns
+  `slug`, `name`, `summary`. (Filter values are `{value: String!, op:
+  FilterComparisonOperator}` objects, not bare strings/scalars — GraphQL's
+  own error messages made iterating to the correct shape fast once hitting
+  the real endpoint.)
+- `collection(slug: String, domainName: String)` — full detail for one
+  collection by slug. Live-confirmed against a real 226K-endorsement
+  collection ("Difficulty, Immersion, Quality", slug `pns4qv`): `name`,
+  `summary`, `category { name }`, `totalDownloads`,
+  `latestPublishedRevision { modCount modFiles { file { name } } }` for
+  the **full mod list** (1,016 mods in this one collection), and
+  `commentThread { comments(first: N) { totalCount nodes { id body
+  createdAt likesCount creator { name } parent { id } } } }` for
+  **comments with real threading** (`parent`, cleaner than mod comments'
+  `reply_id` convention) — this collection alone has 3,205 comments.
+  `Comment` also has `isPinned`, `moderationStatus`, `attachments`,
+  `discardedAt`/`hiddenAt` fields if any of that ever matters.
+- The `CollectionBugReport` system (its own mutations: create/close/open/
+  clear-moderation-status) is a **separate, non-comment feedback mechanism**
+  also present on collections — not investigated further, but worth knowing
+  it exists distinctly from `commentThread` if bug-report content ever
+  becomes relevant.
+- Confirmed via the same live Codespace session used for the main sweep —
+  the Mimecast-fronted-subdomain redirect noted 2026-07-22 for
+  `graphql.nexusmods.com` on the **local machine** doesn't affect the
+  Codespace, same as the main nexusmods.com Cloudflare situation.
+
+### Not yet done
+Building the actual scraper scripts (mirroring `modio_deep_comments.py` /
+`nexus_deep_comments.py`'s shape) — both APIs are confirmed to work and are
+**meaningfully simpler** than the mod-comments scrapers were (no browser
+automation, no cookies, no Cloudflare challenges on either platform for
+this feature specifically). Also not yet decided: whether to pull full mod
+lists for all 843/87 collections up front, or lazily/on-demand; whether
+`get-mod-collections`/`get-mod-collection` (collections a specific MOD
+belongs to, the inverse lookup) are wanted in addition to the game-level
+list.
+
+**After these scripts are running**: Jason reports ChatGPT/Codex has
+reached its next conference-point gate and is waiting for joint review
+(see `00_SHARED_PROJECT_ROADMAP.md`'s C1-C7 conference points and
+`01_CHATGPT_CLAUDE_WORK_DELINEATION.md` for what a check-in packet needs —
+what changed, source artifacts/hashes, validation results, candidate
+decisions, the target DB checksum). Sequencing per the user, 2026-07-24:
+finish building/running the Collections scripts first, *then* do that
+conference — not the other way around.
 
 ## Future work: Load Order Guidance doc research (cross-project pointer, 2026-07-24)
 Not part of this repo's own scope (this repo is the scraper; the guidance doc is
