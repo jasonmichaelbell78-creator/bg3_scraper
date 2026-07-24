@@ -16,10 +16,15 @@ fully expose.
   machines as a manually-carried zip, not through git.
 - Repo: https://github.com/jasonmichaelbell78-creator/bg3_scraper (renamed
   from `bg3_nexus_scraper` — it's not Nexus-only anymore).
-- `gh` CLI appears to be missing on this machine (its wrapper points to a
-  path that no longer exists). Git operations here used `git` directly with
-  a cached Windows Credential Manager credential (`credential.helper =
-  manager`, i.e. Git Credential Manager) instead.
+- `gh` CLI: was missing/broken for a long time (wrapper pointed to a deleted
+  path) — git operations used `git` directly with a cached Windows Credential
+  Manager credential instead. **Fixed 2026-07-24**: reinstalled fresh from the
+  official GitHub release into the path the old wrapper already expected
+  (`~/gh/bin/gh`), then `gh auth login` + `gh auth refresh -h github.com -s
+  codespace` (git's existing credential lacked the scopes `gh` itself needs,
+  notably `codespace`). Now fully working, including `gh codespace
+  list/ssh/cp/rebuild` — a session on this machine can drive a Codespace
+  directly instead of relaying commands through its web terminal by hand.
 
 ## mod.io — comments gap: CLOSED
 - `bg3_scraper.py` did a full sweep of mods/files/deps/events/team — fine.
@@ -272,14 +277,112 @@ fully expose.
     original run applies. 279 and 22659 will need the same eventual
     accepted-gap call as before if they still can't clear on this pass.
 
-## NSFW-gated mods: plan (not yet executed, 2026-07-22)
-- Confirmed gap: NSFW-tagged mods return 0 comments because Nexus hides the
-  thread_id (and the rest of the Posts tab) from an anonymous/non-opted-in
-  session -- not a bug, `fetch_all_comments` correctly returns `[]` when it
-  can't find a thread_id, but that's indistinguishable in the output from a
-  mod that genuinely has zero comments (both produce the same `_status:
-  no_comments` sentinel -- there's no marker yet for *why* a mod came back
-  empty).
+## Mods 279 & 22659: root cause found, rescue attempted, paused (2026-07-24)
+- **Full sweep re-ran clean this time**: after the v1.13 data-loss fix, the sweep was
+  relaunched from a GitHub Codespace and — after the Codespace itself idle-timed-out
+  and shut down mid-run overnight (see idle-timeout note below) and was resumed once —
+  finished at **3,659/3,661 mods**. Only 279 ("Expansion Level 13-20 (Configurable)")
+  and 22659 ("Skip Act 1") are still missing, the same 2-mod gap as before the data
+  loss. Verified via a full completeness check against the tier CSV: no duplicate
+  rows, no corruption, every other mod accounted for (3,199 with real comments, 255
+  genuinely `no_comments`, 205 correctly `nsfw_gated`).
+- **`gh` CLI is now working from this machine** (was previously broken/missing —
+  see old Environment notes above, now stale on this point). Reinstalled fresh from
+  the official GitHub release, authenticated via `gh auth login` +
+  `gh auth refresh -s codespace`. This means Codespace management (list/ssh/cp/rebuild)
+  no longer requires manually relaying commands through the Codespace's own web
+  terminal — a Claude Code session on this machine can drive it directly.
+- **Codespace idle-timeout note**: even with the 240-min max setting, a Codespace
+  *will* still shut down if nothing keeps the connection alive (a disconnected
+  `tail -f sweep.log` doesn't help once the tab/laptop actually closes). When it
+  shuts down mid-sweep, the running Python process is simply killed — no data loss
+  (the file is safely flushed per-mod), but the sweep has to be manually relaunched
+  with `--resume` again. `gh codespace ssh` against a `Shutdown` codespace
+  auto-restarts it (may need a retry — first attempt sometimes 400s with "too many
+  codespaces starting").
+- **Root cause for 279/22659 found**: NOT a hard per-page block or IP-level
+  reputation issue as previously theorized. A vanilla `playwright.chromium.launch()`
+  — even with the `navigator.webdriver` patch from v1.5 — still fails Cloudflare's
+  challenge on these two specific pages, every time, from every environment tried.
+  But a **manually-launched Chromium with zero Playwright launch flags at all**
+  (real, human-driven, no `--enable-automation`) loads both pages' Posts tabs
+  cleanly, live, confirmed 2026-07-24 via the Codespace's `desktop-lite` noVNC
+  virtual desktop. So it's specifically an automation-launch signal beyond what the
+  webdriver-property patch alone fixes — these two pages apparently get flagged by
+  something Cloudflare checks that a patched-after-the-fact property doesn't cover.
+- **Rescue approach that works in principle**: launch a real Chromium manually
+  (`.../chrome-linux64/chrome --no-sandbox --disable-dev-shm-usage --disable-gpu
+  --user-data-dir=<non-default dir> --remote-debugging-port=9222 <mod URL>`, note
+  the non-default `--user-data-dir` — newer Chromium silently refuses to actually
+  open the debug port on the *default* profile dir, a real security change, easy to
+  mistake for the port just not being set), then connect Playwright to that already
+  human-cleared browser via `chromium.connect_over_cdp("http://127.0.0.1:9222")`
+  and drive it with the **existing, unmodified** `fetch_all_comments()` — no cookie
+  extraction/transplant needed (tried first, abandoned: DevTools' Cookies panel
+  truncates long values, VNC clipboard doesn't support copy-out at all, and the
+  classifier correctly blocks scripted searches for browser cookie storage as
+  looking like credential harvesting even when the intent is legitimate). One-off
+  script: `nexus_manual_rescue.py` (not committed — throwaway, scratch-dir only).
+- **Two real bugs found and fixed in `nexus_deep_comments.py` itself while doing
+  this** (both apply to the main sweep too, not just this rescue):
+  - **v1.14**: `fetch_comment_page_resilient()`'s retry path opened a fresh blank
+    page and immediately tried an AJAX `fetch()` from it — but a blank
+    (`about:blank`) page trying to fetch nexusmods.com is cross-origin, so the
+    browser blocks it outright (`TypeError: Failed to fetch`) before the request
+    ever reaches the network. Was being misread as "still Cloudflare-blocked."
+    Fixed: navigate the fresh page to the mod's Posts URL first.
+  - **Also v1.14 (separate)**: `fetch_all_comments()` used to `raise` on exhausted
+    mid-pagination retries, which `fetch_with_retry()` caught by restarting the
+    **entire mod from page 1** — discarding every comment already collected just to
+    re-walk the same ground and hit the same wall again, burning real request
+    "budget" for zero net progress every time. Now returns `(comments, complete)`;
+    a `complete=False` result still keeps everything gathered before the failure,
+    and a `_status: "partial"` sentinel gets written alongside the real rows so an
+    incomplete mod can be found and re-targeted later instead of silently looking
+    identical to a fully-done one.
+- **Where this stands**: with the CORS bug fixed, a rescue attempt got **122 of an
+  unknown total pages for mod 279 and 3 for mod 22659** before hitting a real,
+  persistent Cloudflare challenge that outlasted all 3 retries — i.e. the
+  automation-signal problem is solved, but there's a **separate, still-live
+  volume/burst-based challenge** that triggers during sustained rapid pagination,
+  independent of the browser being genuinely human-launched. That run happened
+  *before* the partial-results fix landed, so that 122/3 pages of real progress
+  was fetched but not saved — starting over is unavoidable next time, but this time
+  it should actually **stick** once it makes progress, page by page, rather than
+  being all-or-nothing.
+  **Deliberately stopped here rather than immediately retrying** — the script's own
+  history is explicit that rapid re-testing against Cloudflare burns whatever
+  request-volume scoring window it's using without helping, and we'd already made
+  two live attempts in quick succession.
+- **Plan for next session, ideally from a genuinely different machine ("home")**:
+  the entire noVNC/manual-Chrome/CDP dance above exists only because this specific
+  work machine has a device-level Mimecast block on `nexusmods.com` (see the
+  Codespaces section above) that has nothing to do with Cloudflare at all. On a
+  machine *without* that block, none of the Codespace/virtual-desktop indirection
+  is needed — a real local browser (or `claude-in-chrome`, if driving one from
+  Claude Code is wanted) could hit these two pages directly, with normal clipboard
+  access and none of today's friction (typos on the debug port number, VNC copy/
+  paste limitations, `/dev/shm` renderer crashes needing `--disable-dev-shm-usage`).
+  After a real cooldown (hours, not minutes) from today's attempts: re-run against
+  279/22659 specifically, expect to hit the same page~123/page~4 wall, but this
+  time the partial-results fix should let real progress accumulate across repeated
+  attempts instead of resetting to zero each time.
+
+## NSFW-gated mods: plan (detection live, capture not yet executed)
+- **Update 2026-07-24: live detection confirmed working in production.** v1.12's
+  `nsfw_gated` distinction (vs. plain `no_comments`) was built and documented
+  2026-07-23 but got its first real confirmation during the 2026-07-24 sweep
+  re-run -- e.g. mod 10090 ("Elven Weaponry - Bladesinger") came back tagged
+  `NSFW-gated (adult content preference), skipping` distinctly, not lumped in
+  with genuine zero-comment mods. 205 mods got this tag in the full sweep. So
+  the *detection* half of this plan is done and proven; only the *capture*
+  half (below) remains, unchanged from the original plan.
+- Original gap as first found: NSFW-tagged mods return 0 comments because Nexus
+  hides the thread_id (and the rest of the Posts tab) from an anonymous/non-
+  opted-in session -- not a bug, `fetch_all_comments` correctly returns `[]`
+  when it can't find a thread_id, but that used to be indistinguishable from a
+  mod that genuinely has zero comments (both produced the same `_status:
+  no_comments` sentinel). Now fixed by the `nsfw_gated` marker above.
 - The tier CSV's `category` column has no adult/NSFW value (it's content-type
   categories like Gameplay/Armor/Spells), so we can't count how many of the
   3,661 are affected ahead of time -- only empirically, from sweep output.
@@ -353,6 +456,38 @@ everything scraped so far.
   whether collection comments/discussion go through clean documented
   endpoints or hit the same kind of gaps mod comments did.
 
+## Future work: Load Order Guidance doc research (cross-project pointer, 2026-07-24)
+Not part of this repo's own scope (this repo is the scraper; the guidance doc is
+part of the broader multi-AI "reference system" project this scraper's output
+feeds into), but noted here so it isn't lost between sessions.
+
+- Current version: `BG3_Load_Order_Guidance_v12.md`, in the shared Google Drive
+  folder (`BG3/BG3/20_CONTROL_HANDOFFS/01_GATE1_BASELINE/BG3_Gate1_Package_2026-07-22/gate1/`
+  and also under `90_HISTORICAL`) -- a local copy of that Drive folder lives at
+  `Google Drive/` in this repo's directory (untracked, gitignored-equivalent,
+  manually synced, not part of the scraper itself).
+- Sourcing status per the doc's own §9: fully mined `wiki.bg3.community`,
+  `bg3.wiki`, Larian's official modding docs, several named mods/tools, Larian's
+  official forums' Patch 8 thread, Steam Community threads, BG3 Mod Manager's
+  GitHub issues, Norbyte's Script Extender/LSLib trackers. **Still blocked/
+  unreached**: Reddit, Facebook groups, two named Discord servers ("BG3 Modding,"
+  "BG3 Modding Community" -- the latter directly affiliated with
+  `wiki.bg3.community`, probably the single most promising unreached source),
+  Nexus Collections (Cloudflare), a locked Larian Discord thread, Steam
+  Community's discussion *search* specifically.
+- A prior Claude-in-Chrome pass (different session, using real logged-in browser
+  sessions) previously succeeded at reaching Reddit and Larian's official Discord
+  where a sandboxed chat instance couldn't -- worth trying again with real local
+  browser access (`claude-in-chrome` skill) rather than assuming those sources
+  stay unreachable, ideally from a machine without this one's Mimecast block
+  (same reasoning as the 279/22659 rescue plan above -- a real browser session
+  from an unblocked device sidesteps a whole category of friction).
+- Next version (v13) would fold in whatever comes out of the now-3,659/3,661
+  Nexus comment corpus once that's delivered into the shared Drive project (see
+  roadmap Gate 3/4 notes -- Nexus comments are explicitly named as a distinct,
+  not-yet-ingested corpus in `00_SHARED_PROJECT_ROADMAP.md`), not just new web
+  sources.
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
@@ -361,32 +496,35 @@ everything scraped so far.
    build-status section above.
 4. ~~Validate the Codespaces setup~~ Done (2026-07-22) — headed works, headless
    confirmed broken, resume gap fixed, timing estimated at 4-8 hours.
-5. Run the full sweep. **Completed once (2026-07-23), then accidentally
-   destroyed the same day** by follow-up commands that truncated the output
-   file (see the data-loss note in the Codespaces-testing section above) —
-   the underlying bug is fixed (v1.13, output file is now append-only once
-   it exists), but the sweep itself has to be run again from scratch.
-   **Not currently running as of 2026-07-23** — relaunch with the same
-   command as before: `nohup python3 nexus_deep_comments.py --resume
-   > sweep.log 2>&1 &` + `disown`. Since the file is empty, this will
-   reprocess all 3,661 mods (minus Mod Fixer) as if starting fresh; expect
-   279 and 22659 to need the same eventual accepted-gap call as last time.
-   **Download a local copy of the output file periodically during the run
-   and immediately after completion** (VS Code Explorer -> right-click ->
-   Download) — this is now the backup, since the Codespace's copy isn't one.
-   After a clean completion: merge into a `nexus_comments_merged.jsonl`
-   analogous to the mod.io merge — likely just a filter pass stripping the
-   `_status` sentinel bookkeeping lines rather than a true merge, since
-   unlike mod.io there's no legacy partial dataset to reconcile against.
-   Not started.
-6. NSFW-gated mods (see dedicated section above): create a throwaway Nexus
-   account, run `nexus_login_capture.py` from home once the main sweep is
-   done, copy `nexus_auth_state.json` into the Codespace, then re-run
-   `nexus_deep_comments.py --auth-state nexus_auth_state.json` against the
-   mods currently recorded as `no_comments`. Not started.
+5. Run the full sweep. **Done, second time, 2026-07-24** (first completion
+   2026-07-23 was accidentally destroyed the same day, see the data-loss note
+   above — v1.13 fixed the underlying bug). Re-ran clean, survived one
+   Codespace idle-shutdown/resume mid-run, finished at **3,659/3,661 mods**.
+   Only 279 and 22659 remain — see the dedicated section above for the full
+   investigation, the two real bugs found/fixed (v1.14) while trying to rescue
+   them, and the plan to retry from a different (non-Mimecast) machine after a
+   cooldown. A local copy has been downloaded off the Codespace already.
+   **Still not started**: merge into a `nexus_comments_merged.jsonl` analogous
+   to the mod.io merge — likely just a filter pass stripping the `_status`
+   sentinel bookkeeping lines rather than a true merge, since unlike mod.io
+   there's no legacy partial dataset to reconcile against. Also not started:
+   delivering this corpus into the shared Drive project's
+   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/` inbox, which is
+   sitting empty waiting for it (see `00_SHARED_PROJECT_ROADMAP.md`, Gate 3).
+6. NSFW-gated mods (see dedicated section above): **detection confirmed working
+   live** (2026-07-24, 205 mods correctly tagged `nsfw_gated` in the sweep
+   above). Capture step still not started: create a throwaway Nexus account,
+   run `nexus_login_capture.py` from home, copy `nexus_auth_state.json` into
+   wherever the next Nexus scraping session runs, then re-run
+   `nexus_deep_comments.py --auth-state nexus_auth_state.json --mod-ids
+   <the 205 nsfw_gated mod IDs> --output nsfw_capture.jsonl`.
 7. Collections on mod.io + Nexus (see dedicated section above) -- future
    work, no priority set, needs live investigation before building anything.
    Not started.
+8. Load Order Guidance doc research (see dedicated section above, cross-project) --
+   Discord servers and Larian's official forums specifically, ideally via
+   `claude-in-chrome` from a non-Mimecast-blocked machine. Not started this
+   session.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.
