@@ -10,10 +10,20 @@ BG3Scraper.zip
 BG3Scraper/
 nexus_comments_deep_sweep.jsonl
 nexus_comments_merged.jsonl
+modio_collections_meta.jsonl
+modio_collections_mods.jsonl
+modio_collections_comments.jsonl
+nexus_collections_meta.jsonl
+nexus_collections_mods.jsonl
+nexus_collections_comments.jsonl
+*.log
 
 # Secrets
 .env
 nexus_auth_state.json
+
+# Manually-synced local mirror of the shared Google Drive folder (Codex handoff)
+Google Drive/
 
 # Python
 __pycache__/

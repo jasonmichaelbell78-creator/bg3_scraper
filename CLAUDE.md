@@ -431,7 +431,7 @@ fully expose.
     still correctly come back empty, rather than first building a detector
     for "was this specifically the adult-content gate."
 
-## Collections (mod.io + Nexus): investigated live, CONFIRMED SCRIPTABLE, not yet built (2026-07-24)
+## Collections (mod.io + Nexus): BUILT, full sweep complete (2026-07-24)
 Both platforms' Collections feature (curated bundles of mods) is now fully
 verified scriptable for name/description/mod-list/comments — this was
 "research only, unknowns not yet resolved" as of 2026-07-22; today's session
@@ -443,10 +443,15 @@ findable anywhere already checked (not this machine's env, not the
 Codespace's env, not the Google Drive `BG3Scraper_Active` mirror's files —
 all had only `.env.example` templates). The user placed real values in a
 local `env.example` file (no leading dot) in the repo root to hand them
-over. **That file is not gitignored as of this note — `env.example` (no
-dot) is a different filename than the gitignored `.env`/`.env.example`
-pattern** — rename/gitignore it before any commit touches the repo root,
-or move the real values into an actual `.env` (already gitignored).
+over. That file was **not gitignored** — `env.example` (no dot) is a
+different filename than the gitignored `.env`/`.env.example` pattern, so it
+was one `git add` away from committing real keys to a public repo. **Fixed
+2026-07-24**: real values moved into `.env` (already gitignored, and now
+what both Collections scripts actually read), `.env.example` restored to
+its placeholder-only template content, `env.example` (no dot) deleted.
+Also added `Google Drive/` itself to `.gitignore` while in there — the
+local Drive mirror was untracked but not actually excluded, same class of
+near-miss.
 
 ### mod.io Collections — fully scriptable, same key already in use
 - `GET https://g-6715.modapi.io/v1/games/6715/collections?api_key=...` —
@@ -516,25 +521,100 @@ or move the real values into an actual `.env` (already gitignored).
   `graphql.nexusmods.com` on the **local machine** doesn't affect the
   Codespace, same as the main nexusmods.com Cloudflare situation.
 
-### Not yet done
-Building the actual scraper scripts (mirroring `modio_deep_comments.py` /
-`nexus_deep_comments.py`'s shape) — both APIs are confirmed to work and are
-**meaningfully simpler** than the mod-comments scrapers were (no browser
-automation, no cookies, no Cloudflare challenges on either platform for
-this feature specifically). Also not yet decided: whether to pull full mod
-lists for all 843/87 collections up front, or lazily/on-demand; whether
-`get-mod-collections`/`get-mod-collection` (collections a specific MOD
-belongs to, the inverse lookup) are wanted in addition to the game-level
-list.
+### Built and run: `modio_deep_collections.py` + `nexus_collections_scraper.py` (2026-07-24)
+Both scripts mirror `modio_deep_comments.py`/`nexus_deep_comments.py`'s shape
+(argparse `--limit`/`--resume`, always-append output files regardless of
+`--resume` — same v1.13 data-loss lesson applied proactively from the start
+this time) but are **meaningfully simpler**: pure `requests`, no browser
+automation, no cookies, no Cloudflare challenges on either platform for this
+feature. mod.io needs `MODIO_API_KEY`; Nexus needs no auth at all.
 
-**After these scripts are running**: Jason reports ChatGPT/Codex has
-reached its next conference-point gate and is waiting for joint review
-(see `00_SHARED_PROJECT_ROADMAP.md`'s C1-C7 conference points and
+Two real findings from building against live data, beyond the 2026-07-22
+research above:
+- **mod.io max page size**: `_limit=100` is the effective ceiling on
+  `/collections` — `_limit=500` errors out (empty/invalid JSON body). Not
+  documented anywhere checked; found by testing.
+- **Nexus GraphQL `comments()` only returns ROOT/top-level comments, not
+  replies** — a real gap, not just an API-doc omission. Live-tested against
+  "Difficulty, Immersion, Quality" (slug `pns4qv`, thread-level
+  `totalCount: 3205`): walking the root `comments(first, after)` connection
+  fully returns exactly **1,076** comments, every one with `parent: null`,
+  then correctly reports `hasNextPage: false`. The remaining 2,129 are
+  replies, which live under a **separate, per-comment** `replies(first,
+  after)` connection — confirmed live (comment `247542`'s
+  `replies { totalCount }` = 4, none of which appear anywhere in the root
+  walk). A standalone `comment(commentId: ID!)` query also exposes that same
+  `replies` connection directly, which is what `nexus_collections_scraper.py`
+  uses to walk each root comment's full reply tree (recursing into any reply
+  that itself reports `replies.totalCount > 0` — schema doesn't guarantee
+  replies can't nest more than one level, even though every sample checked
+  live topped out at depth 1). Cheap in practice: the free `replies {
+  totalCount }` field returned alongside each root comment lets the script
+  skip the extra request entirely for the large majority of comments, which
+  have zero replies. Verified against `pns4qv` post-fix: root-walk fetched
+  1,076 + recursive reply-walk fetched 2,129 = exactly 3,205, matching the
+  API's own `totalCount` precisely, zero duplicate comment IDs, 2,129 rows
+  correctly carrying a non-null `parent_comment_id`.
+- (Also fixed, unrelated to the API: a `UnicodeEncodeError` crashed the
+  first mod.io run at collection 31/843 — Windows' default console codepage
+  (cp1252) can't print some collection-name emoji. File writes were already
+  UTF-8-safe and unaffected (all 30 prior collections' data survived,
+  `--resume` picked back up cleanly); only the `print()` call died. Fixed in
+  both scripts with `sys.stdout.reconfigure(encoding="utf-8",
+  errors="replace")` at import time.)
+
+**Full sweep results (2026-07-24)**, both clean single/two-command runs, no
+data loss, no consecutive-failure circuit-breaker trips:
+- **mod.io: 843/843 collections** (31 in an initial partial run before the
+  encoding crash, 812 more after `--resume`). 35,534 mod-membership rows,
+  968 real comment rows. Verified: 843 unique collection IDs in the meta
+  file, zero duplicates.
+- **Nexus: 87/87 collections**, one clean run. 14,373 mod-membership rows,
+  4,963 real comment rows (verified unique, zero duplicates) + 34
+  `no_comments` sentinel rows for collections genuinely at zero.
+- Output files (`modio_collections_{meta,mods,comments}.jsonl`,
+  `nexus_collections_{meta,mods,comments}.jsonl`) — gitignored like the
+  other large data files, live in the repo root. Nexus's copy was pulled
+  off the Codespace immediately after the sweep finished (`gh codespace
+  cp`) — same "always download before the Codespace can idle-time-out and
+  you forget" lesson as the mod-comments sweep.
+- `nexus_merge_comments.py` (v1.0): same idea as `modio_merge_comments.py`
+  but for the **mod-comments** corpus (not Collections) — a plain filter
+  pass over `nexus_comments_deep_sweep.jsonl` (unlike mod.io there's no
+  legacy partial dataset to reconcile against, so no true merge is needed),
+  stripping the `_status` bookkeeping sentinel lines (`not_found`/
+  `nsfw_gated`/`no_comments`/`partial`) and deduplicating by `comment_id`.
+  Run 2026-07-24: 407,682 source lines → 407,222 unique real comment rows
+  written to `nexus_comments_merged.jsonl`, 0 duplicates, 460 sentinels
+  dropped (255 `no_comments` + 205 `nsfw_gated`, exactly matching the sweep
+  totals documented above). **`nexus_comments_merged.jsonl` (230MB) has been
+  manually uploaded to the Drive `04_NEXUS_COMMENTS_T1_T2_INCOMING` inbox by
+  the user** — too large for the Drive MCP upload tool (base64-through-an-
+  API-call isn't built for this size); manual drag-and-drop was the chosen
+  path over compressing or splitting it.
+
+**Conference-point gate**: Jason reports ChatGPT/Codex has reached its next
+conference-point gate and is waiting for joint review (see
+`00_SHARED_PROJECT_ROADMAP.md`'s C1–C7 conference points and
 `01_CHATGPT_CLAUDE_WORK_DELINEATION.md` for what a check-in packet needs —
 what changed, source artifacts/hashes, validation results, candidate
-decisions, the target DB checksum). Sequencing per the user, 2026-07-24:
-finish building/running the Collections scripts first, *then* do that
-conference — not the other way around.
+decisions, the target DB checksum). The sequencing precondition set
+2026-07-24 ("finish building/running the Collections scripts first, then do
+that conference") is now satisfied — both scripts are built and the full
+sweep is complete, so the conference can now happen whenever the user is
+ready. What "confer" means operationally for this project's Claude session
+is still not fully clear — ask the user rather than assuming.
+
+**Not yet decided**: `get-mod-collections`/`get-mod-collection` (collections
+a specific MOD belongs to, the inverse lookup) weren't built — only the
+game-level list. Also not yet decided: where in the shared Drive structure
+the Collections *data* (as opposed to the CLAUDE.md write-up) should live —
+`00_SHARED_PROJECT_ROADMAP.md` has no designated inbox for this corpus type
+(unlike the pre-existing `04_NEXUS_COMMENTS_T1_T2_INCOMING`). Given the
+existing precedent of `BG3Scraper_Active/Nexus/` already holding raw output
+JSONL alongside the scripts, the Collections output files were placed the
+same way rather than inventing new roadmap structure unilaterally — flag
+this for the user/conference to confirm or redirect.
 
 ## Future work: Load Order Guidance doc research (cross-project pointer, 2026-07-24)
 Not part of this repo's own scope (this repo is the scraper; the guidance doc is
@@ -584,13 +664,14 @@ feeds into), but noted here so it isn't lost between sessions.
    investigation, the two real bugs found/fixed (v1.14) while trying to rescue
    them, and the plan to retry from a different (non-Mimecast) machine after a
    cooldown. A local copy has been downloaded off the Codespace already.
-   **Still not started**: merge into a `nexus_comments_merged.jsonl` analogous
-   to the mod.io merge — likely just a filter pass stripping the `_status`
-   sentinel bookkeeping lines rather than a true merge, since unlike mod.io
-   there's no legacy partial dataset to reconcile against. Also not started:
-   delivering this corpus into the shared Drive project's
-   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/` inbox, which is
-   sitting empty waiting for it (see `00_SHARED_PROJECT_ROADMAP.md`, Gate 3).
+   **Merge done, delivered**: `nexus_merge_comments.py` (v1.0) produced
+   `nexus_comments_merged.jsonl` (407,222 unique real comment rows, 0
+   duplicates) 2026-07-24 — see the Collections section above for full
+   numbers (it's documented there since it was done in the same session as
+   the Collections work, not because it's related to Collections). The user
+   manually uploaded it to the shared Drive project's
+   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/` inbox 2026-07-24 —
+   too large (230MB) for the Drive MCP tool's upload path.
 6. NSFW-gated mods (see dedicated section above): **detection confirmed working
    live** (2026-07-24, 205 mods correctly tagged `nsfw_gated` in the sweep
    above). Capture step still not started: create a throwaway Nexus account,
@@ -598,9 +679,13 @@ feeds into), but noted here so it isn't lost between sessions.
    wherever the next Nexus scraping session runs, then re-run
    `nexus_deep_comments.py --auth-state nexus_auth_state.json --mod-ids
    <the 205 nsfw_gated mod IDs> --output nsfw_capture.jsonl`.
-7. Collections on mod.io + Nexus (see dedicated section above) -- **live
-   investigation done, both platforms confirmed fully scriptable** (2026-07-24).
-   Building the actual scraper scripts is the remaining step. Not started.
+7. Collections on mod.io + Nexus (see dedicated section above) -- **built and
+   swept, 2026-07-24**. Both scraper scripts written, validated live, and run
+   to completion: 843/843 mod.io collections, 87/87 Nexus collections, zero
+   duplicates on either side. Output files pulled off the Codespace and
+   sitting local. Not yet decided: where Collections data should live in the
+   shared Drive structure (no designated inbox exists for this corpus type
+   yet, unlike Nexus comments) -- flagged for the user/conference.
 8. Load Order Guidance doc research (see dedicated section above, cross-project) --
    Discord servers and Larian's official forums specifically, ideally via
    `claude-in-chrome` from a non-Mimecast-blocked machine. Not started this
