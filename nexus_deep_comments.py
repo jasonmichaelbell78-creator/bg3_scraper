@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.13  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.14  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -90,6 +90,26 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   -- --resume no longer controls file mode at all, only whether already-
   recorded mod_ids get skipped from the todo list. Forgetting --resume now
   produces duplicate rows for reprocessed mods at worst, never data loss.
+  v1.14 (2026-07-24): 279 and 22659, previously an accepted 2-mod gap, turned
+  out to be an automation-signal issue, not a hard per-page or IP-reputation
+  block -- confirmed by manually launching Chromium WITHOUT any Playwright
+  launch flags (no --enable-automation, real navigator.webdriver=false from
+  birth, not just patched post-launch) and loading both mods' Posts tabs
+  live via a real, human-driven session: both loaded cleanly, no challenge.
+  Rescued via a one-off script (nexus_manual_rescue.py, not part of the main
+  sweep) that connects to that already-running, already-cleared browser over
+  its --remote-debugging-port via playwright.chromium.connect_over_cdp() and
+  drives it with fetch_all_comments() unchanged. That rescue surfaced a real,
+  separate bug in fetch_comment_page_resilient(): its retry path opened a
+  fresh blank page and immediately tried an AJAX fetch() from it without
+  navigating it to the mod's Posts URL first, so the fetch was cross-origin
+  from about:blank and the browser blocked it outright ("TypeError: Failed
+  to fetch") rather than the request ever reaching Cloudflare. Fixed above.
+  This bug was latent in every run to date, not new -- it just requires a
+  mid-pagination challenge to trigger, which is rare, and every prior mod
+  that failed happened to fail at the whole-mod level (handled by the
+  unaffected fetch_with_retry() / fresh-navigation path) rather than mid-
+  pagination.
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -314,6 +334,17 @@ def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], 
         except PermissionError:
             page_box[0].close()
             page_box[0] = new_page(context)
+            # The AJAX fetch() below runs from page_box[0]'s own JS context, so a fresh
+            # blank page must be navigated to the mod's Posts URL first -- otherwise the
+            # fetch is cross-origin from about:blank and the browser blocks it outright
+            # ("TypeError: Failed to fetch", not a Cloudflare challenge) rather than ever
+            # reaching the network. Found 2026-07-24 rescuing mods 279/22659: both got
+            # past the initial-load block on a manually-launched browser but then hit
+            # this exact bug on their first mid-pagination retry.
+            try:
+                fetch_mod_posts_page(page_box[0], mod_id)
+            except (PermissionError, FileNotFoundError):
+                pass  # the retry loop's next fetch_comment_page attempt will surface this
             continue
     raise PermissionError(f"Cloudflare challenge persisted after {len(CHALLENGE_BACKOFFS)} attempts on page {page_num}")
 
