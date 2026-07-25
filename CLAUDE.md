@@ -568,10 +568,10 @@ accepted as a permanent partial gap; 22659 deprioritized, not reattempted.**
   nsfw_capture.jsonl`: **205/205 mods processed, 40,078 real comment rows,
   only 10 mods genuinely empty even with adult content enabled, zero failures
   or partial sentinels.** Folded into `nexus_comments_merged.jsonl` via
-  `nexus_merge_comments.py` v1.1 (see the merge section below) -- not yet
-  re-delivered to Drive (the previous `nexus_comments_merged.jsonl` upload in
-  `04_NEXUS_COMMENTS_T1_T2_INCOMING/` is now stale and needs replacing with
-  this updated version).
+  `nexus_merge_comments.py` v1.1 (see the merge section below). **Re-delivered
+  to Drive 2026-07-25** -- the updated 243MB/451,885-row file now replaces
+  the stale 2026-07-24 copy in `04_NEXUS_COMMENTS_T1_T2_INCOMING/` (same
+  file ID, verified by size match).
 
 ## Collections (mod.io + Nexus): BUILT, full sweep complete (2026-07-24)
 Both platforms' Collections feature (curated bundles of mods) is now fully
@@ -750,10 +750,11 @@ is still not fully clear — ask the user rather than assuming.
 **Update 2026-07-25**: Drive location decided — created
 `10_SOURCE_CORPORA/05_COLLECTIONS_MODIO_NEXUS_INCOMING/`, a sibling to
 `04_NEXUS_COMMENTS_T1_T2_INCOMING` following the same numbering convention.
-Folder exists but the six output files aren't in it yet — each is too large
-to push through the Drive MCP tool's inline-content upload path (same
-constraint that forced the 230MB `nexus_comments_merged.jsonl` to go in by
-hand), so this still needs the same manual drag-and-drop delivery.
+**All six output files delivered 2026-07-25** — the smallest
+(`nexus_collections_meta.jsonl`) via direct upload, the other five
+(1.9-8.8MB each, too large for the Drive MCP tool's inline-content path)
+via manual drag-and-drop by the user. Verified: all six present with
+matching file sizes.
 
 **Not yet decided**: `get-mod-collections`/`get-mod-collection` (collections
 a specific MOD belongs to, the inverse lookup) weren't built — only the
@@ -816,11 +817,11 @@ feeds into), but noted here so it isn't lost between sessions.
    `nsfw_capture.jsonl` and `rescue_279.jsonl` alongside the main sweep file.
    `nexus_comments_merged.jsonl` is now **451,885 unique real comment rows**
    (up from 407,222 on 2026-07-24) — 9,096 duplicates and 475 sentinels
-   dropped in this pass. Needs re-delivery to
-   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/`, replacing the
-   2026-07-24 upload, which is now stale.
+   dropped in this pass. **Re-delivered to Drive 2026-07-25**, replacing the
+   stale 2026-07-24 upload in `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/`
+   (verified: same file ID, size now matches the updated 243MB file).
 6. NSFW-gated mods (see dedicated section above): **capture DONE, 2026-07-25**.
-   `nexus_login_capture.py` v2.0 (uncommitted) produced
+   `nexus_login_capture.py` v2.0 (committed) produced
    `data/nexus/nexus_auth_state.json`; `nexus_deep_comments.py --auth-state`
    against the 205 `nsfw_gated` mod IDs produced 40,078 real comment rows,
    zero failures, into `data/nexus/deep_comments/nsfw_capture.jsonl`. Folded
@@ -829,21 +830,22 @@ feeds into), but noted here so it isn't lost between sessions.
    swept, 2026-07-24**. Both scraper scripts written, validated live, and run
    to completion: 843/843 mod.io collections, 87/87 Nexus collections, zero
    duplicates on either side. **Drive location decided and folder created
-   2026-07-25** (`10_SOURCE_CORPORA/05_COLLECTIONS_MODIO_NEXUS_INCOMING/`) but
-   the six output files still need manual drag-and-drop delivery (too large
-   for the Drive MCP tool's inline upload path).
+   2026-07-25** (`10_SOURCE_CORPORA/05_COLLECTIONS_MODIO_NEXUS_INCOMING/`),
+   **all six output files delivered 2026-07-25** (verified present with
+   matching sizes).
 8. Load Order Guidance doc research (see dedicated section above, cross-project) --
    Discord servers and Larian's official forums specifically, ideally via
    `claude-in-chrome` from a non-Mimecast-blocked machine. Not started this
    session.
-9. **New, 2026-07-25**: three scripts have local changes committed this
-   session -- `nexus_login_capture.py` (v2.0 rewrite), `nexus_deep_comments.py`
-   (v1.15, adds `--connect-cdp`/`--page-delay`), `nexus_merge_comments.py`
-   (v1.1, multi-source merge). Still outstanding: deliver the Collections
-   files and the updated `nexus_comments_merged.jsonl` to Drive (both need
-   manual drag-and-drop), and refresh the Drive status doc
-   (`02_NEXUS_SCRAPER_STATUS_*.md`) to a new dated version per the standing
-   directive.
+9. **2026-07-25**: three scripts had local changes -- `nexus_login_capture.py`
+   (v2.0 rewrite), `nexus_deep_comments.py` (v1.15, adds
+   `--connect-cdp`/`--page-delay`), `nexus_merge_comments.py` (v1.1,
+   multi-source merge) -- all committed and pushed to GitHub (`976d638`).
+   Collections files and the updated `nexus_comments_merged.jsonl` both
+   delivered to Drive; Drive status doc refreshed to
+   `02_NEXUS_SCRAPER_STATUS_2026-07-25_v4.md` per the standing directive.
+   **All Claude-side items from this session are complete** — the C5
+   conference with ChatGPT/Codex can proceed.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.
