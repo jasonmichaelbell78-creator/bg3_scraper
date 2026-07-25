@@ -462,7 +462,67 @@ there.
   time the partial-results fix should let real progress accumulate across repeated
   attempts instead of resetting to zero each time.
 
-## NSFW-gated mods: plan (detection live, capture not yet executed)
+**Update 2026-07-25: retried from home (no Mimecast block on this machine), 279
+accepted as a permanent partial gap; 22659 deprioritized, not reattempted.**
+- `nexus_deep_comments.py` v1.15 folded the manual-rescue technique into the main
+  script instead of a throwaway one-off: `--connect-cdp <url>` attaches to an
+  already-running, manually-launched Chrome (bypassing Playwright's launch()
+  entirely, not just patching `navigator.webdriver` after the fact) via
+  `connect_over_cdp()`, and `--page-delay` overrides the flat 0.5s pace between
+  pagination requests. Chrome was launched manually pointed at
+  `data/nexus/_login_capture_chrome_profile` (the same profile
+  `nexus_login_capture.py` uses), so it also carried the already-authenticated,
+  adult-content-enabled session for free.
+- Ran against mod 279 only with `--page-delay 8` (16x slower than default) and
+  `--long-backoff`. **Failed at exactly page 123 again** -- the identical page
+  the original 2026-07-24 rescue died on, despite a completely different session
+  (fresh `cf_clearance`), a genuinely human-launched browser, and 16x slower
+  pagination. This is a real, useful negative result: if the trigger were a
+  time-window/burst-rate heuristic, slowing down 16x should have moved the wall
+  outward or avoided it entirely. It didn't move at all. **Conclusion: this looks
+  like a fixed trigger point specific to this thread (page 123 of mod 279's
+  comment thread), not a client-side pacing or session-freshness issue** --
+  pacing and automation-signal fixes have both now been tried and neither moves
+  the wall.
+- Thanks to the v1.14 partial-results fix, this attempt's progress was actually
+  saved this time (unlike 2026-07-24's 122 pages, fetched but lost before that
+  fix landed): **4,511 unique real comments** (3,288 of them replies) written to
+  `data/nexus/deep_comments/rescue_279.jsonl`, zero duplicates, tagged
+  `_status: partial, _comments_captured: 4511`.
+- **Correction found while merging**: `nexus_comments_deep_sweep.jsonl` (the
+  main sweep file) already contained an *earlier* successful partial capture
+  for both mods, timestamped **2026-07-25T01:58-02:35 UTC -- hours before this
+  session's own conversation began**, evidently from a separate, undocumented
+  run: mod 279 at exactly **4,511 comments** (byte-for-byte the same count
+  this session's own rescue independently reproduced) and mod **22659 at 74
+  comments**, both tagged `partial`, each appended twice (duplicate runs,
+  harmless -- `nexus_merge_comments.py` dedupes by `comment_id`). So **22659 is
+  not a full/zero gap either -- it has 74 real comments already**, contradicting
+  what this conversation reported earlier before the raw file was actually
+  inspected. The 279 result being bit-for-bit identical across two independent
+  sessions (different Cloudflare session, hours apart) is strong further
+  evidence the page-123 wall is a deterministic property of that specific
+  thread's own content/position, not a client-side timing or session artifact
+  -- a full walk from page 1 against presumably-unchanged historical comment
+  content will keep landing on the same boundary regardless of who's asking.
+- Both mods' partial data (4,511 for 279, 74 for 22659) is now folded into
+  `nexus_comments_merged.jsonl` via `nexus_merge_comments.py` v1.1 (2026-07-25),
+  which reads the main sweep file plus `nsfw_capture.jsonl` and
+  `rescue_279.jsonl` as additional sources -- see the merge changelog for the
+  updated totals.
+- **Decision (user, 2026-07-25): stop chasing this. Both 279 (4,511 comments)
+  and 22659 (74 comments) stay permanent partial-data gaps** -- 22659 was
+  explicitly deprioritized as less important and was not separately
+  reattempted this session (its 74-comment partial predates this conversation
+  entirely). A next step if this is ever revisited: teach the script to resume
+  pagination from a known `thread_id` + starting page number, so a future
+  attempt could jump straight to page ~123 in a fresh session instead of
+  re-walking pages 1-122 first -- a cheap way to test whether a truly fresh,
+  minimal-request session can get past the wall, without re-spending the
+  "budget" to get there again. Not built; not needed unless this gap gets
+  revisited.
+
+## NSFW-gated mods: detection live, capture DONE (2026-07-25)
 - **Update 2026-07-24: live detection confirmed working in production.** v1.12's
   `nsfw_gated` distinction (vs. plain `no_comments`) was built and documented
   2026-07-23 but got its first real confirmation during the 2026-07-24 sweep
@@ -495,21 +555,23 @@ there.
     take an optional `--auth-state PATH`, passed straight to
     `browser.new_context(storage_state=...)`. Unset by default (anonymous),
     so this doesn't change existing behavior.
-- **Deliberately deferred, not run yet**:
-  - The actual account creation + `nexus_login_capture.py` run should
-    happen from home, not the Codespace -- this one-time interactive login
-    doesn't need to dodge Mimecast at all (only bulk scraping does), so
-    there's no reason to fight noVNC/Xvfb desktop interaction inside the
-    Codespace for it. Just run the capture script locally at home, then copy
-    the resulting small JSON file into the Codespace afterward.
-  - Should wait until the main 3,661-mod sweep finishes before doing any of
-    this, to avoid a second browser session hitting nexusmods.com from the
-    same Codespace IP concurrently with the big unattended run.
-  - Once available, the plan is to re-run with `--auth-state
-    nexus_auth_state.json` against the mods already recorded as
-    `no_comments` (not the whole sweep again) -- accepting that most will
-    still correctly come back empty, rather than first building a detector
-    for "was this specifically the adult-content gate."
+- **Update 2026-07-25: capture complete.** `nexus_login_capture.py` v2.0
+  (rewritten this session, not yet committed) split the interactive login into
+  `--launch` (a bare, non-Playwright Chrome subprocess -- no `--enable-
+  automation`, so the login/signup captcha actually renders, unlike v1.0 which
+  drove the whole flow through Playwright and got a captcha that silently
+  refused to render) and `--export` (Playwright attaches via
+  `connect_over_cdp()` purely to read out the already-authenticated session's
+  cookies afterward). `data/nexus/nexus_auth_state.json` was produced this way.
+  Then ran `nexus_deep_comments.py --auth-state data/nexus/nexus_auth_state.json
+  --mod-ids <the 205 nsfw_gated mod IDs> --output data/nexus/deep_comments/
+  nsfw_capture.jsonl`: **205/205 mods processed, 40,078 real comment rows,
+  only 10 mods genuinely empty even with adult content enabled, zero failures
+  or partial sentinels.** Folded into `nexus_comments_merged.jsonl` via
+  `nexus_merge_comments.py` v1.1 (see the merge section below) -- not yet
+  re-delivered to Drive (the previous `nexus_comments_merged.jsonl` upload in
+  `04_NEXUS_COMMENTS_T1_T2_INCOMING/` is now stale and needs replacing with
+  this updated version).
 
 ## Collections (mod.io + Nexus): BUILT, full sweep complete (2026-07-24)
 Both platforms' Collections feature (curated bundles of mods) is now fully
@@ -685,12 +747,17 @@ sweep is complete, so the conference can now happen whenever the user is
 ready. What "confer" means operationally for this project's Claude session
 is still not fully clear — ask the user rather than assuming.
 
+**Update 2026-07-25**: Drive location decided — created
+`10_SOURCE_CORPORA/05_COLLECTIONS_MODIO_NEXUS_INCOMING/`, a sibling to
+`04_NEXUS_COMMENTS_T1_T2_INCOMING` following the same numbering convention.
+Folder exists but the six output files aren't in it yet — each is too large
+to push through the Drive MCP tool's inline-content upload path (same
+constraint that forced the 230MB `nexus_comments_merged.jsonl` to go in by
+hand), so this still needs the same manual drag-and-drop delivery.
+
 **Not yet decided**: `get-mod-collections`/`get-mod-collection` (collections
 a specific MOD belongs to, the inverse lookup) weren't built — only the
-game-level list. Also not yet decided: where in the shared Drive structure
-the Collections *data* (as opposed to the CLAUDE.md write-up) should live —
-`00_SHARED_PROJECT_ROADMAP.md` has no designated inbox for this corpus type
-(unlike the pre-existing `04_NEXUS_COMMENTS_T1_T2_INCOMING`). Given the
+game-level list. Given the
 existing precedent of `BG3Scraper_Active/Nexus/` already holding raw output
 JSONL alongside the scripts, the Collections output files were placed the
 same way rather than inventing new roadmap structure unilaterally — flag
@@ -740,36 +807,43 @@ feeds into), but noted here so it isn't lost between sessions.
    2026-07-23 was accidentally destroyed the same day, see the data-loss note
    above — v1.13 fixed the underlying bug). Re-ran clean, survived one
    Codespace idle-shutdown/resume mid-run, finished at **3,659/3,661 mods**.
-   Only 279 and 22659 remain — see the dedicated section above for the full
-   investigation, the two real bugs found/fixed (v1.14) while trying to rescue
-   them, and the plan to retry from a different (non-Mimecast) machine after a
-   cooldown. A local copy has been downloaded off the Codespace already.
-   **Merge done, delivered**: `nexus_merge_comments.py` (v1.0) produced
-   `nexus_comments_merged.jsonl` (407,222 unique real comment rows, 0
-   duplicates) 2026-07-24 — see the Collections section above for full
-   numbers (it's documented there since it was done in the same session as
-   the Collections work, not because it's related to Collections). The user
-   manually uploaded it to the shared Drive project's
-   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/` inbox 2026-07-24 —
-   too large (230MB) for the Drive MCP tool's upload path.
-6. NSFW-gated mods (see dedicated section above): **detection confirmed working
-   live** (2026-07-24, 205 mods correctly tagged `nsfw_gated` in the sweep
-   above). Capture step still not started: create a throwaway Nexus account,
-   run `nexus_login_capture.py` from home, copy `nexus_auth_state.json` into
-   wherever the next Nexus scraping session runs, then re-run
-   `nexus_deep_comments.py --auth-state nexus_auth_state.json --mod-ids
-   <the 205 nsfw_gated mod IDs> --output nsfw_capture.jsonl`.
+   **279/22659 both now confirmed permanent partial gaps (2026-07-25)**: 279
+   has 4,511 comments (page-123 wall reproduced identically across two
+   independent sessions hours apart — see the dedicated section above), 22659
+   has 74 (found already captured, undocumented, while merging — never a full
+   zero gap). User decision 2026-07-25: stop chasing both, accept as-is.
+   **Merge updated 2026-07-25**: `nexus_merge_comments.py` v1.1 now folds in
+   `nsfw_capture.jsonl` and `rescue_279.jsonl` alongside the main sweep file.
+   `nexus_comments_merged.jsonl` is now **451,885 unique real comment rows**
+   (up from 407,222 on 2026-07-24) — 9,096 duplicates and 475 sentinels
+   dropped in this pass. Needs re-delivery to
+   `10_SOURCE_CORPORA/04_NEXUS_COMMENTS_T1_T2_INCOMING/`, replacing the
+   2026-07-24 upload, which is now stale.
+6. NSFW-gated mods (see dedicated section above): **capture DONE, 2026-07-25**.
+   `nexus_login_capture.py` v2.0 (uncommitted) produced
+   `data/nexus/nexus_auth_state.json`; `nexus_deep_comments.py --auth-state`
+   against the 205 `nsfw_gated` mod IDs produced 40,078 real comment rows,
+   zero failures, into `data/nexus/deep_comments/nsfw_capture.jsonl`. Folded
+   into the merged corpus per item 5 above.
 7. Collections on mod.io + Nexus (see dedicated section above) -- **built and
    swept, 2026-07-24**. Both scraper scripts written, validated live, and run
    to completion: 843/843 mod.io collections, 87/87 Nexus collections, zero
-   duplicates on either side. Output files pulled off the Codespace and
-   sitting local. Not yet decided: where Collections data should live in the
-   shared Drive structure (no designated inbox exists for this corpus type
-   yet, unlike Nexus comments) -- flagged for the user/conference.
+   duplicates on either side. **Drive location decided and folder created
+   2026-07-25** (`10_SOURCE_CORPORA/05_COLLECTIONS_MODIO_NEXUS_INCOMING/`) but
+   the six output files still need manual drag-and-drop delivery (too large
+   for the Drive MCP tool's inline upload path).
 8. Load Order Guidance doc research (see dedicated section above, cross-project) --
    Discord servers and Larian's official forums specifically, ideally via
    `claude-in-chrome` from a non-Mimecast-blocked machine. Not started this
    session.
+9. **New, 2026-07-25**: three scripts have local changes committed this
+   session -- `nexus_login_capture.py` (v2.0 rewrite), `nexus_deep_comments.py`
+   (v1.15, adds `--connect-cdp`/`--page-delay`), `nexus_merge_comments.py`
+   (v1.1, multi-source merge). Still outstanding: deliver the Collections
+   files and the updated `nexus_comments_merged.jsonl` to Drive (both need
+   manual drag-and-drop), and refresh the Drive status doc
+   (`02_NEXUS_SCRAPER_STATUS_*.md`) to a new dated version per the standing
+   directive.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.

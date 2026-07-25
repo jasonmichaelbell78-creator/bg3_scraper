@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-nexus_deep_comments.py  v1.14  (investigation 2026-07-21/22, see CLAUDE.md)
+nexus_deep_comments.py  v1.15  (investigation 2026-07-21/22, see CLAUDE.md)
 ================================================================================
 Fetches full comment/Posts threads for BG3 Nexus mods. Nexus's REST v1 API has
 no comments endpoint at all (nexus_bg3_scraper.py's comment fetch always 404s).
@@ -110,6 +110,14 @@ Auth strategy -- NOT the same as modio_deep_comments.py:
   that failed happened to fail at the whole-mod level (handled by the
   unaffected fetch_with_retry() / fresh-navigation path) rather than mid-
   pagination.
+  v1.15 (2026-07-25): folds nexus_manual_rescue.py's approach (previously a
+  throwaway, uncommitted one-off) into the main script as --connect-cdp,
+  since it's a real, reusable fix rather than a single-incident workaround.
+  Also adds --page-delay to override the flat 0.5s REQUEST_DELAY pace
+  between pagination requests -- a second, independent lever for 279/22659-
+  style mods, since the automation-signal fix (--connect-cdp) and the
+  volume/burst-trigger issue (v1.3 finding) are separate mechanisms and both
+  may need addressing together on a mod that fails at high page counts.
 
 How the data actually comes back (different from mod.io -- HTML, not JSON):
   - A mod's Posts tab (`?tab=posts`) is server-rendered: the first page of
@@ -229,6 +237,20 @@ def open_browser_context(playwright, headless: bool = False, auth_state: str | N
     return browser, context
 
 
+def connect_cdp_context(playwright, cdp_url: str):
+    """Attaches to an already-running, manually-launched Chrome (no --enable-automation,
+    no Playwright launch() at all) via its --remote-debugging-port, instead of starting a
+    new Playwright-controlled browser. For mods 279/22659 (see v1.14 note above): even the
+    patched-navigator.webdriver open_browser_context() above still gets challenged on these
+    two specific pages, every time -- but a genuinely human-launched Chrome loads them
+    cleanly. Reuses whatever profile/cookies that Chrome window already has (e.g. point it
+    at nexus_login_capture.py's PROFILE_DIR to inherit that already-authenticated session
+    for free, no storage_state injection needed)."""
+    browser = playwright.chromium.connect_over_cdp(cdp_url)
+    context = browser.contexts[0]
+    return browser, context
+
+
 def new_page(context: BrowserContext) -> Page:
     """A fresh page (tab) per mod -- reusing one page for repeated top-level
     navigations reliably re-triggers Cloudflare's challenge; a new page in the
@@ -317,7 +339,7 @@ def fetch_comment_page(page: Page, mod_id: int, thread_id: str, page_num: int) -
 
 
 def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], mod_id: int,
-                                  thread_id: str, page_num: int) -> str:
+                                  thread_id: str, page_num: int, backoffs=None) -> str:
     """Fetches one AJAX comment page. On a Cloudflare challenge, backs off and swaps in a
     fresh page (page_box[0]) before retrying the SAME page_num -- unlike fetch_with_retry's
     whole-mod restart, this doesn't discard comments already collected from earlier pages,
@@ -328,7 +350,8 @@ def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], 
     enough pages to trip that heuristic before finishing a full top-to-bottom pass could
     never succeed under the old scheme, since every retry restarted at page 1 and re-spent
     the same request budget getting back to the same place it failed before."""
-    for attempt, backoff in enumerate(CHALLENGE_BACKOFFS, start=1):
+    backoffs = backoffs if backoffs is not None else CHALLENGE_BACKOFFS
+    for attempt, backoff in enumerate(backoffs, start=1):
         if backoff:
             print(f"    page {page_num}: Cloudflare challenge, backing off {backoff}s (attempt {attempt})...")
             time.sleep(backoff)
@@ -349,10 +372,11 @@ def fetch_comment_page_resilient(context: BrowserContext, page_box: list[Page], 
             except (PermissionError, FileNotFoundError):
                 pass  # the retry loop's next fetch_comment_page attempt will surface this
             continue
-    raise PermissionError(f"Cloudflare challenge persisted after {len(CHALLENGE_BACKOFFS)} attempts on page {page_num}")
+    raise PermissionError(f"Cloudflare challenge persisted after {len(backoffs)} attempts on page {page_num}")
 
 
-def fetch_all_comments(context: BrowserContext, mod_id: int) -> tuple[list[dict], bool]:
+def fetch_all_comments(context: BrowserContext, mod_id: int, page_delay: float = None,
+                        backoffs=None) -> tuple[list[dict], bool]:
     """Returns (comments, complete). complete=False means pagination hit a Cloudflare
     challenge that outlasted fetch_comment_page_resilient()'s retries -- comments holds
     whatever was successfully gathered before that point, not the mod's full comment set.
@@ -361,7 +385,13 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> tuple[list[dict]
     the ENTIRE mod from page 1 -- discarding all comments already collected and re-walking
     the same pages just to hit the same wall again, burning Cloudflare request "budget"
     for zero net progress. Returning partial results instead means at least the pages
-    that did succeed aren't thrown away."""
+    that did succeed aren't thrown away.
+    page_delay overrides the module-level REQUEST_DELAY between successful pagination
+    fetches -- added for 279/22659 style mods, where the default 0.5s pace between
+    requests is a plausible trigger for Cloudflare's volume/burst-based challenge (a
+    separate mechanism from the automation-signal issue open_browser_context()/
+    connect_cdp_context() address -- see v1.14 note above)."""
+    page_delay = page_delay if page_delay is not None else REQUEST_DELAY
     page_box = [new_page(context)]
     try:
         first_page_html = fetch_mod_posts_page(page_box[0], mod_id)
@@ -392,7 +422,8 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> tuple[list[dict]
         complete = True
         while page_num <= max_pages:
             try:
-                html = fetch_comment_page_resilient(context, page_box, mod_id, thread_id, page_num)
+                html = fetch_comment_page_resilient(context, page_box, mod_id, thread_id, page_num,
+                                                      backoffs=backoffs)
             except PermissionError:
                 complete = False
                 break
@@ -403,7 +434,7 @@ def fetch_all_comments(context: BrowserContext, mod_id: int) -> tuple[list[dict]
             for c in new_ids:
                 seen_ids.add(c["comment_id"])
                 comments.append(c)
-            time.sleep(REQUEST_DELAY)
+            time.sleep(page_delay)
             page_num += 1
 
         for c in comments:
@@ -424,7 +455,8 @@ CHALLENGE_BACKOFFS = (0, 20, 60)  # seconds before each attempt; first attempt h
 LONG_CHALLENGE_BACKOFFS = (0, 60, 180, 300, 600)
 
 
-def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BACKOFFS) -> tuple[list[dict], bool]:
+def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BACKOFFS,
+                      page_delay: float = None) -> tuple[list[dict], bool]:
     """Like fetch_all_comments, but retries the WHOLE mod with backoff if the very first
     page load hits a Cloudflare challenge (fetch_all_comments only raises PermissionError
     for that case now -- a mid-pagination challenge is caught internally and returns a
@@ -435,7 +467,7 @@ def fetch_with_retry(context: BrowserContext, mod_id: int, backoffs=CHALLENGE_BA
             print(f"  Cloudflare challenge re-triggered, backing off {backoff}s (attempt {attempt})...")
             time.sleep(backoff)
         try:
-            return fetch_all_comments(context, mod_id)
+            return fetch_all_comments(context, mod_id, page_delay=page_delay, backoffs=backoffs)
         except PermissionError:
             continue
     raise PermissionError(f"Cloudflare challenge persisted after {len(backoffs)} attempts")
@@ -473,6 +505,25 @@ def main():
                               "Useful for a targeted re-check pass (e.g. --mod-ids against the mods "
                               "currently recorded as no_comments, to reclassify nsfw_gated ones) "
                               "without touching or clobbering the main sweep's output file.")
+    parser.add_argument("--connect-cdp", type=str, default=None,
+                         help="Attach to an already-running, manually-launched Chrome (started "
+                              "yourself, e.g. `chrome --remote-debugging-port=9222 "
+                              "--user-data-dir=<dir>`) via its CDP URL (e.g. http://127.0.0.1:9222), "
+                              "instead of having Playwright launch its own browser. For mods like "
+                              "279/22659 where even open_browser_context()'s navigator.webdriver "
+                              "patch still gets challenged, but a genuinely human-launched browser "
+                              "loads the page cleanly (see v1.14 note above). Point --user-data-dir "
+                              "at nexus_login_capture.py's profile dir to also inherit that session's "
+                              "login/adult-content cookies for free. Ignores --headless and "
+                              "--auth-state (the manually-launched browser's own profile/context is "
+                              "used as-is).")
+    parser.add_argument("--page-delay", type=float, default=None,
+                         help="Seconds to sleep between successful pagination requests, overriding "
+                              "the default 0.5s (REQUEST_DELAY). For stubborn high-volume mods where "
+                              "the default pace itself is a plausible trigger for Cloudflare's "
+                              "volume/burst-based challenge, distinct from the automation-signal "
+                              "issue --connect-cdp addresses -- e.g. try 5-10s for a slow, careful "
+                              "single-mod rescue rather than the default pace used for the full sweep.")
     args = parser.parse_args()
 
     backoffs = LONG_CHALLENGE_BACKOFFS if args.long_backoff else CHALLENGE_BACKOFFS
@@ -514,14 +565,17 @@ def main():
                                     # better to stop loudly than silently grind through the rest
                                     # of an unattended multi-hour run collecting nothing.
     with sync_playwright() as p:
-        browser, context = open_browser_context(p, headless=args.headless, auth_state=args.auth_state)
+        if args.connect_cdp:
+            browser, context = connect_cdp_context(p, args.connect_cdp)
+        else:
+            browser, context = open_browser_context(p, headless=args.headless, auth_state=args.auth_state)
 
         with open(output_file, mode, encoding="utf-8") as out:
             for i, mod in enumerate(todo, 1):
                 mod_id, name = mod["mod_id"], mod["name"]
                 now = datetime.now(timezone.utc).isoformat()
                 try:
-                    comments, complete = fetch_with_retry(context, mod_id, backoffs)
+                    comments, complete = fetch_with_retry(context, mod_id, backoffs, page_delay=args.page_delay)
                 except FileNotFoundError:
                     print(f"[{i}/{len(todo)}] {name} ({mod_id}): mod not found, skipping")
                     # Sentinel line so --resume treats this mod as done, not "never tried" --
@@ -568,9 +622,12 @@ def main():
                 written += len(comments)
                 status_note = "" if complete else " (PARTIAL -- Cloudflare challenge mid-pagination)"
                 print(f"[{i}/{len(todo)}] {name} ({mod_id}): {len(comments)} comments{status_note}")
-                time.sleep(REQUEST_DELAY)
+                time.sleep(args.page_delay if args.page_delay is not None else REQUEST_DELAY)
 
-        browser.close()
+        if args.connect_cdp:
+            print("Leaving the manually-launched Chrome window open -- close it yourself when done.")
+        else:
+            browser.close()
 
     print(f"\nDone. {written} comments written to {output_file}")
 
