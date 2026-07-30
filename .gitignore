@@ -3,6 +3,15 @@
 # discourages rehosting bulk API-sourced data publicly). Everything under
 # data/ is gitignored regardless of subfolder.
 data/
+catalog_workspace/
+Downloads/
+archive/
+manifests/MANUAL_UPLOAD_QUEUE_*.csv
+
+# Large local data that may exist while a migration is in progress.
+*.jsonl
+*.db
+*.zip
 
 # nexus_bg3_scraper.py's own --output-dir default ("./bg3_nexus_data") is
 # CWD-relative and deliberately NOT anchored into data/ (a known follow-up
