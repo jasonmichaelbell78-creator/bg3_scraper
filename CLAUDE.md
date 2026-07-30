@@ -12,14 +12,13 @@ This section supersedes older layout references below when they conflict.
 
 - `scripts/` and `manifests/` remain the active, tracked scraper project.
 - Local scraped outputs are under `data/`; they are intentionally ignored by Git.
-- `catalog_workspace/` is a separate ignored local validation area. Its B26
-  baseline is immutable; Google Drive is the authoritative shared checkpoint.
+- `catalog/` is a separate ignored local validation area. Its B26 baseline is
+  immutable; Google Drive is the authoritative shared checkpoint.
 - `Downloads/` is immutable intake. `archive/` holds non-authoritative local
   historical material, including the manual Drive mirror.
-- Current human catalog: Drive `BG3/00_CURRENT_CATALOG`.
-- Current machine baseline: Drive `BG3/01_MACHINE_BASELINE`.
-- Source data belongs in Drive `10_SOURCE_CORPORA`; archived Drive copies and
-  `90_ARCHIVE/LEGACY_SCRAPER_PROJECTS` are never authoritative inputs.
+- Current catalog: Drive `BG3/CATALOG`, including its `B26_DATABASE_BASELINE`.
+- Source data belongs in Drive `BG3/SOURCES`; Drive `ARCHIVE` is never an
+  authoritative input.
 ## Repo layout (reorganized 2026-07-24 — see commit `8e6278c` for the full
 before/after and rationale; historical notes elsewhere in this file that
 mention old flat-root paths like `nexus_comments_deep_sweep.jsonl` or

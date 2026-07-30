@@ -3,7 +3,7 @@
 # discourages rehosting bulk API-sourced data publicly). Everything under
 # data/ is gitignored regardless of subfolder.
 data/
-catalog_workspace/
+catalog/
 Downloads/
 archive/
 manifests/MANUAL_UPLOAD_QUEUE_*.csv
