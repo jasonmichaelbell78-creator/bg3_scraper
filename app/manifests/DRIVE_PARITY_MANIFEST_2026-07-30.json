@@ -1,0 +1,246 @@
+{
+  "generated_at": "2026-07-30",
+  "description": "Exact standalone retained local datasets and their Google Drive parity targets.",
+  "datasets": [
+    {
+      "local_path": "data/collections/modio_collections_comments.jsonl",
+      "sha256": "8254971d357a878c9223cb442e08f7141ec88210f08c9e12b177e5478e0de31d",
+      "size_bytes": 263609,
+      "drive_id": "1ITOl5-vMEYI3dyNAqKwvcLtD6UJs8B7s",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/modio_collections_comments.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/modio_collections_meta.jsonl",
+      "sha256": "bdf729efcdd68ca354f6a6e5c3b810606e8b10e4b0904176a33803ab21c80b16",
+      "size_bytes": 1968062,
+      "drive_id": "1_h-LRpe_mnx27pgL8e2qXZQ3WAM_FlIM",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/modio_collections_meta.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/modio_collections_mods.jsonl",
+      "sha256": "d7849fb67bb05f206f05f17206dcbfa92a2182b50863cec318ba79eb8bf10624",
+      "size_bytes": 6021462,
+      "drive_id": "1JssLtYQnQGmkc4iYpiC0UWTS1LDuu2RM",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/modio_collections_mods.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/modio_collections_sweep.log",
+      "sha256": "2f8661e52e939676dcaf301442facaab7b8ed15a38d8a1bc1fedcac735a5c38c",
+      "size_bytes": 48983,
+      "drive_id": "1WKhViO-eqsmS9QWQ0FEA_w19hZrij-vR",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/modio_collections_sweep.log",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/nexus_collections_comments.jsonl",
+      "sha256": "34f1663ad68a6b55c83a5bf05afaeb0ae237eeddd117662a46266106fa5c38eb",
+      "size_bytes": 8779422,
+      "drive_id": "1Rpvhbl5I9MgIWq2mRQPVJkd9cSjvDVbi",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/nexus_collections_comments.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/nexus_collections_meta.jsonl",
+      "sha256": "a0af9ea4b8e95a3fd15fc1a7b4c62640b7a7fabc6ee5ade649600baace9042b2",
+      "size_bytes": 29198,
+      "drive_id": "1aqPRLihfJ_7fZDujbCwA3bSWw52Oof_W",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/nexus_collections_meta.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/collections/nexus_collections_mods.jsonl",
+      "sha256": "383ca3e239e70b7a76c95e6f2836cf7a9d8cd6b565962a51fce8e4303286cf36",
+      "size_bytes": 2900607,
+      "drive_id": "14qA42DOD3vPmGcvYvWt2zD8WLXC_rQqd",
+      "drive_path": "BG3/SOURCES/COLLECTIONS/nexus_collections_mods.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/bg3_modio_audit.db",
+      "sha256": "77e7aa5b2da7ee0508459290f91adeb0699983270fa41c925ed3690b02dc4902",
+      "size_bytes": 203087872,
+      "drive_id": "1_y16IcdEsenWms1gbL8hLFmPKEqmyPm-",
+      "drive_path": "BG3/SOURCES/MODIO/bg3_modio_audit.db",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/bg3_modio_data.zip",
+      "sha256": "9e73e347926677d765e67585b122fb5b39e949215f7d1c6ee96756a25c6f5cce",
+      "size_bytes": 34077631,
+      "drive_id": "1o0rfql17BHhgqFQcGIGQP1pT1EliuAPi",
+      "drive_path": "BG3/SOURCES/MODIO/bg3_modio_data.zip",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/BG3_Modio_Normalized_Package_v0_1.zip",
+      "sha256": "59d36accfa6c4aac804aae60bdcb87b4786ee7fa7f713eab006b582344815127",
+      "size_bytes": 51433993,
+      "drive_id": "1d1c3gy5rRVDajSjvGCacLwrGoBKwGcNr",
+      "drive_path": "BG3/SOURCES/MODIO/BG3_Modio_Normalized_Package_v0_1.zip",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_comments_deep_refresh.jsonl",
+      "sha256": "501e73c77d45903625f6d53283b295bda095096f4bc8306d17a68702d313b491",
+      "size_bytes": 39588872,
+      "drive_id": "1E7FREFU8Zuuu0RcQM_2zy7eeeCHSVdJF",
+      "drive_path": "BG3/SOURCES/MODIO/modio_comments_deep_refresh.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_comments_fullsweep.jsonl",
+      "sha256": "1170262c52137e86b36d29fb623dde788597611d1ef9258a1587369cd5811f0a",
+      "size_bytes": 59964241,
+      "drive_id": "167bnKNdYR8V_v3dqcm6nu8mdzKnNZNV6",
+      "drive_path": "BG3/SOURCES/MODIO/modio_comments_fullsweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_comments_merged.jsonl",
+      "sha256": "bcd546e99781a0005390e6e3367460d0f34930f0d35a11863a39689d4155893a",
+      "size_bytes": 86766346,
+      "drive_id": "14YPOSdyNu97XnzI83mPMKvNckfidNc7j",
+      "drive_path": "BG3/SOURCES/MODIO/modio_comments_merged.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_deps_fullsweep.jsonl",
+      "sha256": "341a20d3aeefe6c43faeb2481f6f1ea8d05e11de4d08fd1ce50f09e0e25a3f8c",
+      "size_bytes": 36758641,
+      "drive_id": "1sUm24HVQGP5YDkZWyoQd2oYr0UAT90HP",
+      "drive_path": "BG3/SOURCES/MODIO/modio_deps_fullsweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_events_fullsweep.jsonl",
+      "sha256": "cefbd4c38bff782eea3d12063a56e8df1ab0dc8ce1c8e79f9acbef82ace15b9a",
+      "size_bytes": 3893420,
+      "drive_id": "1bhpeMDfGM06XlzB9zYGql_Ph4FZ0ga9B",
+      "drive_path": "BG3/SOURCES/MODIO/modio_events_fullsweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_files_fullsweep.jsonl",
+      "sha256": "7b1bb9c5dca54ec1a10b5d5642ef7283a49bf37dfb2feb0c1d44fc4ea64bfdff",
+      "size_bytes": 23358675,
+      "drive_id": "1pDCqwmkMTXpIJ3491Go8rbQ4PAa3y_M1",
+      "drive_path": "BG3/SOURCES/MODIO/modio_files_fullsweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_mods_full_sweep.jsonl",
+      "sha256": "a414b8b8b0543d288724655d1555ba41be4fd43d1c162f47d5c25cdc1cdb7759",
+      "size_bytes": 68606373,
+      "drive_id": "1p4VGPrZk4_u6uoF0loKQO-xLJwFzAUhq",
+      "drive_path": "BG3/SOURCES/MODIO/modio_mods_full_sweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_progress.json",
+      "sha256": "a0ffce51b15ded4fc8b76545881e19003159c9addab5e313011b53742e41ecd0",
+      "size_bytes": 73857,
+      "drive_id": "12uLawp_RnaFCYLSk0CHfNaH6gtekIOLL",
+      "drive_path": "BG3/SOURCES/MODIO/modio_progress.json",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/modio/modio_team_fullsweep.jsonl",
+      "sha256": "8f349b98053871b110117679543b5665c75d8816c02eacf0961dfd57acdcf6a8",
+      "size_bytes": 5830944,
+      "drive_id": "1ldMckfb1YTjc8TezSsHReQVJERnjcfdu",
+      "drive_path": "BG3/SOURCES/MODIO/modio_team_fullsweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_comments_deep_sweep.jsonl",
+      "sha256": "6d4797e2ffc27f43487505e124abf30e4005636c2d3509c7b7a1468503c82ee0",
+      "size_bytes": 229988891,
+      "drive_id": "10Htjzvt1NBgL_RqFSWZDY2Nr-4MfW_Is",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_comments_deep_sweep.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_comments_merged.jsonl",
+      "sha256": "8babc8462e81b245728ba579ab456f24b353b0e8e07c6f3e586daedae177e44b",
+      "size_bytes": 230352898,
+      "drive_id": "1NBiw0ln6JTzt8APcM3uUcIHKn289WH9V",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_comments_merged.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_mods_changelogs.jsonl",
+      "sha256": "3c25ca27ce7940ab5efbaedf8683deccf818d15458c0b129109bba1daf966e8e",
+      "size_bytes": 13072563,
+      "drive_id": "1ZAyuiPooCfQmjtA4xxWggUE6Bfd3fqaf",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_mods_changelogs.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_mods_comments.jsonl",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+      "size_bytes": 0,
+      "drive_id": "1hqFs-7_F0bdkHggaRw15XBfg7c2DLBRJ",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_mods_comments.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_mods_dependencies.jsonl",
+      "sha256": "ecb9ebef9122859673237ad9c616e5ddcaf1b4d129e33ff9e116a583560adff7",
+      "size_bytes": 5498969,
+      "drive_id": "1G4n7HIsVMB7IWC2wvS1r4ZwylyumO327",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_mods_dependencies.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_mods_files.jsonl",
+      "sha256": "c20be835edfdc2729458c4d2431a61c3183b54be08727f11d7d46733f65d5d44",
+      "size_bytes": 169055955,
+      "drive_id": "1YsY6D_bWKeV9g-NVPl0rF3ivVDSVqA-I",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_mods_files.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_mods_metadata.jsonl",
+      "sha256": "e506170621b74547f73cbcbed8e43d08e959a2fd522bf26ff2e134ce49b8bba6",
+      "size_bytes": 111855307,
+      "drive_id": "1PFRfobTBcFAhnlNr-CzkNeST_tn1M5HP",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_mods_metadata.jsonl",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_progress.json",
+      "sha256": "f267971324589ec16c3f090ce7a169d264c7420fba16c8330df27baf1452bac3",
+      "size_bytes": 170934,
+      "drive_id": "1hBPEGV0pJ3KsqhqT4yQWWsp0rI-pbFgc",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_progress.json",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "data/nexus/nexus_run_summary.json",
+      "sha256": "9f808c7aa8abd8fff4ff068ea547ac274e352db64848999b77cbc22f338b34c0",
+      "size_bytes": 292,
+      "drive_id": "1JSoOZI9INde021ZAbWsB5DxsgduzW0Zz",
+      "drive_path": "BG3/SOURCES/NEXUS/nexus_run_summary.json",
+      "status": "verified_by_drive_listing"
+    },
+    {
+      "local_path": "catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db",
+      "sha256": "cb37e0392b7bdb0b06f8095c44b8352363610999498ff4803e07411df3187775",
+      "size_bytes": 876204032,
+      "drive_id": null,
+      "drive_path": "BG3/CATALOG/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db",
+      "status": "manual_upload_pending"
+    },
+    {
+      "local_path": "catalog/B26/C4_Semantic_B26_Phase1_Coverage_Full_Snapshot.zip",
+      "sha256": "50772e0059e78bc3f9f21e7ccdf80156b1c92ce436baa27b95554ff156ae7ef0",
+      "size_bytes": 200722310,
+      "drive_id": null,
+      "drive_path": "BG3/CATALOG/B26/C4_Semantic_B26_Phase1_Coverage_Full_Snapshot.zip",
+      "status": "manual_upload_pending"
+    }
+  ]
+}

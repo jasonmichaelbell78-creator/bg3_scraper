@@ -10,9 +10,9 @@ fully expose.
 
 This section supersedes older layout references below when they conflict.
 
-- `scripts/` and `manifests/` remain the active, tracked scraper project.
+- `app/scripts/` and `app/manifests/` remain the active, tracked scraper project.
 - Local scraped outputs are under `data/`; they are intentionally ignored by Git.
-- `catalog/` is a separate ignored local validation area. Its B26 baseline is
+- `catalog/B26/` is a separate ignored local validation area. Its B26 baseline is
   immutable; Google Drive is the authoritative shared checkpoint.
 - `Downloads/` is immutable intake. `archive/` holds non-authoritative local
   historical material, including the manual Drive mirror.
@@ -24,38 +24,38 @@ before/after and rationale; historical notes elsewhere in this file that
 mention old flat-root paths like `nexus_comments_deep_sweep.jsonl` or
 `Nexus/` are accurate for when they were written, just not the current
 on-disk location)
-- `scripts/` — every Python scraper/merger/utility, plus
+- `app/scripts/` — every Python scraper/merger/utility, plus
   `BG3_Nexus_Tier1_Tier2_Mods.csv` (the curated target list, tracked in git,
   sits beside `nexus_deep_comments.py` since it's a script input, not
   scraped output).
 - `data/` — all scraped output, entirely gitignored, organized by
   platform/purpose:
-  - `data/modio/csv_sweep/` — `bg3_scraper.py`'s 8 CSVs (master/files/deps/
+  - `data/modio/` — `bg3_scraper.py`'s 8 CSVs (master/files/deps/
     dets/comments/events/metas/teams).
-  - `data/modio/full_sweep/` — the mod.io deep-comments corpus:
+  - `data/modio/` — the mod.io deep-comments corpus:
     `modio_mods_full_sweep.jsonl`, `modio_comments_fullsweep.jsonl`,
     `modio_comments_deep_refresh.jsonl`, **`modio_comments_merged.jsonl`
     (the one to use)**, plus deps/events/files/team/progress files.
   - `data/modio/archive/` — standalone backup artifacts:
     `bg3_modio_audit.db`, `bg3_modio_data.zip`,
     `BG3_Modio_Normalized_Package_v0_1.zip`.
-  - `data/nexus/legacy_full_sweep/` — `nexus_bg3_scraper.py`'s June 2026
+  - `data/nexus/` — `nexus_bg3_scraper.py`'s June 2026
     full sweep (16,191 mods: metadata/files/changelogs/dependencies).
     Confirmed 2026-07-24 via a full Drive sweep (byte-identical file sizes
     against the Drive-side `10_SOURCE_CORPORA/03_NEXUS_API_BASE_2026-06-28/`
     copy) that this really is that script's own output, just renamed/moved
     at some point — not a different script version, resolving an earlier
-    open question. The script's own `--output-dir` default (`./bg3_nexus_data`)
+    open question. The script's own `--output-dir` default (`data/nexus`)
     still doesn't point here by default; pass
     `--output-dir data/nexus/legacy_full_sweep` explicitly if re-running it.
-  - `data/nexus/deep_comments/` — `nexus_comments_deep_sweep.jsonl` (raw)
+  - `data/nexus/` — `nexus_comments_deep_sweep.jsonl` (raw)
     and **`nexus_comments_merged.jsonl` (the one to use)**, plus
     `nsfw_recheck.jsonl` once that script is run.
   - `data/nexus/nexus_auth_state.json` — NSFW-capture login session, once
     created (see the dedicated section below).
-  - `data/collections/modio/` and `data/collections/nexus/` — the
+  - `data/collections/` and `data/collections/` — the
     Collections sweep output.
-- `manifests/` — small tracked provenance docs (checksums, per-mod counts)
+- `app/manifests/` — small tracked provenance docs (checksums, per-mod counts)
   for the mod.io captures.
 - `Google Drive/` — untracked local mirror of a handful of shared control
   docs pulled from the Drive project (roadmap, work delineation, checkpoint
@@ -91,8 +91,8 @@ there.
      Codespace itself is cloud-based and reachable from any machine once this
      is done; no need to recreate it.
   3. Large data files under `data/` (see "Repo layout" above for the current
-     subfolder scheme — e.g. `data/nexus/deep_comments/nexus_comments_merged.jsonl`,
-     `data/collections/modio/modio_collections_*.jsonl`, etc.) — gitignored,
+     subfolder scheme — e.g. `data/nexus/nexus_comments_merged.jsonl`,
+     `data/collections/modio_collections_*.jsonl`, etc.) — gitignored,
      not on the Codespace either once downloaded locally. Re-copy manually
      (zip) from the previous machine, or re-run the relevant sweep script if
      the source data is more convenient to regenerate than transfer.
@@ -500,7 +500,7 @@ accepted as a permanent partial gap; 22659 deprioritized, not reattempted.**
 - Thanks to the v1.14 partial-results fix, this attempt's progress was actually
   saved this time (unlike 2026-07-24's 122 pages, fetched but lost before that
   fix landed): **4,511 unique real comments** (3,288 of them replies) written to
-  `data/nexus/deep_comments/rescue_279.jsonl`, zero duplicates, tagged
+  `data/nexus/rescue_279.jsonl`, zero duplicates, tagged
   `_status: partial, _comments_captured: 4511`.
 - **Correction found while merging**: `nexus_comments_deep_sweep.jsonl` (the
   main sweep file) already contained an *earlier* successful partial capture
@@ -577,7 +577,7 @@ accepted as a permanent partial gap; 22659 deprioritized, not reattempted.**
   `connect_over_cdp()` purely to read out the already-authenticated session's
   cookies afterward). `data/nexus/nexus_auth_state.json` was produced this way.
   Then ran `nexus_deep_comments.py --auth-state data/nexus/nexus_auth_state.json
-  --mod-ids <the 205 nsfw_gated mod IDs> --output data/nexus/deep_comments/
+  --mod-ids <the 205 nsfw_gated mod IDs> --output data/nexus/
   nsfw_capture.jsonl`: **205/205 mods processed, 40,078 real comment rows,
   only 10 mods genuinely empty even with adult content enabled, zero failures
   or partial sentinels.** Folded into `nexus_comments_merged.jsonl` via
@@ -837,7 +837,7 @@ feeds into), but noted here so it isn't lost between sessions.
    `nexus_login_capture.py` v2.0 (committed) produced
    `data/nexus/nexus_auth_state.json`; `nexus_deep_comments.py --auth-state`
    against the 205 `nsfw_gated` mod IDs produced 40,078 real comment rows,
-   zero failures, into `data/nexus/deep_comments/nsfw_capture.jsonl`. Folded
+   zero failures, into `data/nexus/nsfw_capture.jsonl`. Folded
    into the merged corpus per item 5 above.
 7. Collections on mod.io + Nexus (see dedicated section above) -- **built and
    swept, 2026-07-24**. Both scraper scripts written, validated live, and run

@@ -54,7 +54,7 @@ from pathlib import Path
 
 from playwright.sync_api import sync_playwright
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 DATA_DIR = BASE_DIR / "data" / "nexus"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 AUTH_STATE_FILE = DATA_DIR / "nexus_auth_state.json"

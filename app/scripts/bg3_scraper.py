@@ -17,8 +17,8 @@ BASE_URL = f"https://g-{GAME_ID}.modapi.io/v1"
 HEADERS = {"X-Modio-Platform": "windows", "Accept-Language": "en", "Accept": "application/json"}
 
 # Filenames
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data" / "modio" / "csv_sweep"
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "data" / "modio"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 
 FILES = {

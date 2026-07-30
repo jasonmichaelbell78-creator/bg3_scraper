@@ -48,8 +48,8 @@ import json
 from collections import Counter
 from pathlib import Path
 
-BASE_DIR = Path(__file__).resolve().parent.parent
-DATA_DIR = BASE_DIR / "data" / "nexus" / "deep_comments"
+BASE_DIR = Path(__file__).resolve().parents[2]
+DATA_DIR = BASE_DIR / "data" / "nexus"
 SOURCE_FILES = [
     DATA_DIR / "nexus_comments_deep_sweep.jsonl",
     DATA_DIR / "nsfw_capture.jsonl",

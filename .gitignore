@@ -6,18 +6,14 @@ data/
 catalog/
 Downloads/
 archive/
-manifests/MANUAL_UPLOAD_QUEUE_*.csv
+app/manifests/MANUAL_UPLOAD_QUEUE_*.csv
 
 # Large local data that may exist while a migration is in progress.
 *.jsonl
 *.db
 *.zip
 
-# nexus_bg3_scraper.py's own --output-dir default ("./bg3_nexus_data") is
-# CWD-relative and deliberately NOT anchored into data/ (a known follow-up
-# item -- see CLAUDE.md). Ignored explicitly here so a default-flags run
-# doesn't leave an unignored multi-hundred-MB directory at repo root.
-bg3_nexus_data/
+
 
 *.log
 

@@ -61,14 +61,14 @@ import requests
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 GAME_ID = 6715
 BASE_URL = f"https://g-{GAME_ID}.modapi.io/v1"
 HEADERS = {"X-Modio-Platform": "windows", "Accept-Language": "en", "Accept": "application/json"}
 REQUEST_DELAY = 0.4
 PAGE_SIZE = 100  # confirmed max effective _limit -- 500 errors out
 
-DATA_DIR = BASE_DIR / "data" / "collections" / "modio"
+DATA_DIR = BASE_DIR / "data" / "collections"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 META_FILE = DATA_DIR / "modio_collections_meta.jsonl"
 MODS_FILE = DATA_DIR / "modio_collections_mods.jsonl"

@@ -26,7 +26,7 @@ RESUME SAFE:
   If Codespaces times out or you Ctrl+C, run with --resume to continue
   exactly where you left off. Output files are appended, never overwritten.
 
-OUTPUT (./bg3_nexus_data/):
+OUTPUT (data/nexus/):
   mods_metadata.jsonl     – one JSON object per mod
   mods_files.jsonl        – one JSON object per file
   mods_changelogs.jsonl   – one JSON object per mod changelog
@@ -41,7 +41,7 @@ USAGE:
   python nexus_bg3_scraper.py --api-key "YOUR_KEY" --resume     # continue
 
 FLAGS:
-  --output-dir PATH     Output directory (default: ./bg3_nexus_data)
+  --output-dir PATH     Output directory (default: repository data/nexus)
   --delay FLOAT         Seconds between requests (default: 0.6)
   --limit INT           Max mods to write; 0 = unlimited (default: 0)
   --max-mod-id INT      Highest mod ID to check in historical sweep (default: 26000)
@@ -489,7 +489,7 @@ def main():
         formatter_class=argparse.ArgumentDefaultsHelpFormatter,
     )
     p.add_argument("--api-key",          required=True)
-    p.add_argument("--output-dir",       default="./bg3_nexus_data")
+    p.add_argument("--output-dir",       default=str(Path(__file__).resolve().parents[2] / "data" / "nexus"))
     p.add_argument("--delay",            type=float, default=0.6)
     p.add_argument("--limit",            type=int,   default=0,
                    help="Max English mods to write (0 = unlimited)")

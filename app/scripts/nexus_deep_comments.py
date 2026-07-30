@@ -174,9 +174,9 @@ from bs4 import BeautifulSoup
 from playwright.sync_api import BrowserContext, Page, sync_playwright
 
 SCRIPT_DIR = Path(__file__).resolve().parent
-BASE_DIR = SCRIPT_DIR.parent  # repo root -- kept for any future consumers
+BASE_DIR = SCRIPT_DIR.parent.parent  # repo root -- kept for any future consumers
 TIER_CSV = SCRIPT_DIR / "BG3_Nexus_Tier1_Tier2_Mods.csv"
-DATA_DIR = BASE_DIR / "data" / "nexus" / "deep_comments"
+DATA_DIR = BASE_DIR / "data" / "nexus"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 OUTPUT_FILE = DATA_DIR / "nexus_comments_deep_sweep.jsonl"
 

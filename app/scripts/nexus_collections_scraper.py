@@ -94,14 +94,14 @@ import requests
 if sys.stdout.encoding and sys.stdout.encoding.lower() != "utf-8":
     sys.stdout.reconfigure(encoding="utf-8", errors="replace")
 
-BASE_DIR = Path(__file__).resolve().parent.parent
+BASE_DIR = Path(__file__).resolve().parents[2]
 GRAPHQL_URL = "https://api.nexusmods.com/v2/graphql"
 GAME_DOMAIN = "baldursgate3"
 REQUEST_DELAY = 0.3
 LIST_PAGE_SIZE = 100
 COMMENTS_PAGE_SIZE = 100
 
-DATA_DIR = BASE_DIR / "data" / "collections" / "nexus"
+DATA_DIR = BASE_DIR / "data" / "collections"
 DATA_DIR.mkdir(parents=True, exist_ok=True)
 META_FILE = DATA_DIR / "nexus_collections_meta.jsonl"
 MODS_FILE = DATA_DIR / "nexus_collections_mods.jsonl"
