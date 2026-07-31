@@ -809,6 +809,49 @@ feeds into), but noted here so it isn't lost between sessions.
   not-yet-ingested corpus in `00_SHARED_PROJECT_ROADMAP.md`), not just new web
   sources.
 
+## Incident: `nexus_comments_merged.jsonl` regressed to a stale version, then recovered (2026-07-31)
+- A 2026-07-30 parity audit (`DB_PROJECT_GAP_REPORT_2026-07-30.md`, run from
+  the work-computer copy of this project) found that the canonical
+  **451,885-row** `nexus_comments_merged.jsonl` (the 2026-07-25 merge that
+  folded in the 205-mod NSFW capture and the mod-279 rescue — see the NSFW
+  and 279/22659 sections above) was no longer present **anywhere** — not on
+  the work computer, not in Drive `BG3/SOURCES/NEXUS/` (file id
+  `1NBiw0ln6JTzt8APcM3uUcIHKn289WH9V`), not even in Drive's own stale-mirror
+  archive. Both locations only had an older **407,222-row** version
+  (missing all NSFW-gated-mod comments and most of mod 279's rescued
+  comments), dated 2026-07-24 — i.e. it predates the very merge it was
+  supposed to be the output of. Root cause: the 2026-07-29/30 repo-layout
+  reorg treated local `data/nexus/` as source-of-truth when populating the
+  new flat Drive `SOURCES/NEXUS/` layout, but the local copy being read from
+  at that point was itself already stale. Codex's Phase 2A/2B "Comment
+  Evidence Index" build (2026-07-28, so it ran *before* the regression) had
+  already ingested the correct 451,885-row file — confirmed via its own
+  build receipt, which records the file's SHA-256 as
+  `3e931c96f6456b044161ef7e7f64cb4b51d9de32d89d1a0c19bd1b89114934e0` — so
+  the comment *data* was never actually lost, just the standalone raw JSONL.
+- **Recovered 2026-07-31**: this home machine's own repo clone had never
+  been touched by the reorg and still had the original file untouched since
+  2026-07-25, at the pre-reorg path `data/nexus/deep_comments/
+  nexus_comments_merged.jsonl` (243MB) — SHA-256 verified as an **exact
+  match** to the hash in Codex's build receipt. Its two raw inputs
+  (`nsfw_capture.jsonl`, 40,088 lines; `rescue_279.jsonl`, 4,512 lines —
+  both also reported "absent everywhere" by the audit) were sitting right
+  next to it, also intact. All three copied into the new flat `data/nexus/`
+  layout on this machine and onto the work-computer copy, overwriting the
+  stale 407,222-row file there.
+- **Still open**: Drive `BG3/SOURCES/NEXUS/nexus_comments_merged.jsonl`
+  still has the stale 407,222-row version — this file is ~243MB, over the
+  Drive connector's ~100MB upload ceiling (same constraint noted in
+  `B26_MANUAL_UPLOAD_QUEUE_2026-07-30.md`), so it needs the same manual
+  drag-and-drop replace the 2026-07-25 delivery used, not an automated
+  upload. Use Drive's "Manage versions → Upload new version" on the
+  existing file (not delete+reupload) so the file ID stays
+  `1NBiw0ln6JTzt8APcM3uUcIHKn289WH9V` and anything referencing that ID
+  (e.g. Codex's build receipt) stays valid. **Lesson for future reorgs**:
+  before ever treating a local copy as source-of-truth for a Drive push,
+  diff its row count / mtime against the most recent CLAUDE.md entry for
+  that file first.
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
