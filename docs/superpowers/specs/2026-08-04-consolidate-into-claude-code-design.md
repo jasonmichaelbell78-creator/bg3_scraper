@@ -123,8 +123,12 @@ is made.
 
 **Drive's role changes** from "authoritative shared record + mandatory
 handoff mechanism" to **backup + optional second-opinion drop**:
-- Drive keeps receiving the large artifacts as an off-Codespace backup —
-  unchanged.
+- Local disk (this Codespace) becomes the primary working copy once
+  materialized — Drive stops being where work happens. After Phase 1's
+  initial pull, the relationship reverses: as Claude edits `catalog/B26/`
+  or `app/catalog/` going forward, the *updated* local version gets pushed
+  back to Drive periodically as a backup snapshot (checksum-verified, same
+  discipline as today), rather than Drive being re-pulled from.
 - The formal conference-packet ceremony (versioned status docs, `C1`–`C7`
   gate numbering, paired docs kept in lockstep) is replaced by: when a
   second opinion is wanted, drop one current-state doc in Drive — no
