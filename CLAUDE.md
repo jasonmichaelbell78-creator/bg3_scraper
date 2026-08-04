@@ -839,15 +839,14 @@ feeds into), but noted here so it isn't lost between sessions.
   next to it, also intact. All three copied into the new flat `data/nexus/`
   layout on this machine and onto the work-computer copy, overwriting the
   stale 407,222-row file there.
-- **Still open**: Drive `BG3/SOURCES/NEXUS/nexus_comments_merged.jsonl`
-  still has the stale 407,222-row version — this file is ~243MB, over the
-  Drive connector's ~100MB upload ceiling (same constraint noted in
-  `B26_MANUAL_UPLOAD_QUEUE_2026-07-30.md`), so it needs the same manual
-  drag-and-drop replace the 2026-07-25 delivery used, not an automated
-  upload. Use Drive's "Manage versions → Upload new version" on the
-  existing file (not delete+reupload) so the file ID stays
-  `1NBiw0ln6JTzt8APcM3uUcIHKn289WH9V` and anything referencing that ID
-  (e.g. Codex's build receipt) stays valid. **Lesson for future reorgs**:
+- **Resolved 2026-08-04**: Drive `BG3/SOURCES/NEXUS/nexus_comments_merged.jsonl`
+  (file ID `1NBiw0ln6JTzt8APcM3uUcIHKn289WH9V`, same ID preserved via
+  "Manage versions → Upload new version") now matches the correct
+  451,885-row file exactly — verified via the Drive API: `fileSize`
+  254,879,764 bytes, byte-for-byte identical to the recovered local copy,
+  `modifiedTime` 2026-07-31T22:25:14Z (same window as the recovery commit
+  `c6b3576`). The manual replace from the note below evidently happened
+  already; nothing further needed here. **Lesson for future reorgs**:
   before ever treating a local copy as source-of-truth for a Drive push,
   diff its row count / mtime against the most recent CLAUDE.md entry for
   that file first.
