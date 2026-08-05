@@ -16,6 +16,11 @@ This section supersedes older layout references below when they conflict.
   immutable; Google Drive is the authoritative shared checkpoint.
 - `Downloads/` is immutable intake. `archive/` holds non-authoritative local
   historical material, including the manual Drive mirror.
+- **Decided 2026-08-04**: `Downloads/` and `archive/` are not recreated on
+  new machines/Codespaces going forward — both are non-authoritative by
+  this file's own long-standing description, and Drive remains the backup
+  if anything in them is ever needed. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`.
 - Current catalog: Drive `BG3/CATALOG`, including its `B26_DATABASE_BASELINE`.
 - Source data belongs in Drive `BG3/SOURCES`; Drive `ARCHIVE` is never an
   authoritative input.
@@ -57,6 +62,11 @@ on-disk location)
     Collections sweep output.
 - `app/manifests/` — small tracked provenance docs (checksums, per-mod counts)
   for the mod.io captures.
+- `app/catalog_pipeline/` — the B26 database-build pipeline, materialized
+  from Drive into this repo 2026-08-04 (see
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`).
+  Distinct from `app/scripts/` (scraper-only). The actual `.db` files it
+  operates on live in `catalog/B26/` (gitignored, same as `data/`).
 - `Google Drive/` — untracked local mirror of a handful of shared control
   docs pulled from the Drive project (roadmap, work delineation, checkpoint
   policy, latest status doc) — **not** a full Drive sync, just what's been
@@ -109,20 +119,18 @@ there.
   machines as a manually-carried zip, not through git.
 - Repo: https://github.com/jasonmichaelbell78-creator/bg3_scraper (renamed
   from `bg3_nexus_scraper` — it's not Nexus-only anymore).
-- **Standing project directive (2026-07-24): keep Google Drive updated for
-  ChatGPT/Codex's use whenever there's a meaningful update, moving forward.**
-  Codex does not have GitHub access to this repo — its only visibility into
-  this project's state is the manually-synced Google Drive folder, so this
-  file being current on GitHub is not sufficient on its own. No Drive
-  file-update/delete tool exists (only create/copy), so each sync creates a
-  new file — use a clearly dated name, note in the new file's own text which
-  older file(s) it supersedes, and leave the superseded ones for the user to
-  clean up manually. Two locations matter: a full copy of this file goes in
-  `30_SCRAPER_PROJECTS/BG3Scraper_Active/` (buried, technical-detail copy),
-  and a short human-readable summary goes at the **top level** of the `BG3`
-  Drive folder (alongside `00_SHARED_PROJECT_ROADMAP.md` and
-  `01_CHATGPT_CLAUDE_WORK_DELINEATION.md`) — a file three folders deep is
-  not something Codex will ever think to look for on its own.
+- **Standing project directive (revised 2026-08-04): the project now runs
+  primarily out of Claude Code, with Drive as backup and an optional
+  second-opinion channel rather than a mandatory sync target.** Update
+  Drive when it's actually useful — a backup snapshot of a large artifact,
+  or a status doc when Codex's independent review is wanted — not
+  automatically after every commit. The old multi-step "conference packet"
+  ceremony (dated status docs kept in lockstep pairs, `C1`–`C7` gate
+  numbering per `00_SHARED_PROJECT_ROADMAP.md`) is retired as a mandatory
+  process; a single current-state doc dropped in Drive is sufficient when
+  a second opinion is wanted. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`
+  for the full reasoning.
 - `gh` CLI: was missing/broken for a long time (wrapper pointed to a deleted
   path) — git operations used `git` directly with a cached Windows Credential
   Manager credential instead. **Fixed 2026-07-24**: reinstalled fresh from the
