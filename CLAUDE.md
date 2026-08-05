@@ -12,10 +12,18 @@ This section supersedes older layout references below when they conflict.
 
 - `app/scripts/` and `app/manifests/` remain the active, tracked scraper project.
 - Local scraped outputs are under `data/`; they are intentionally ignored by Git.
-- `catalog/B26/` is a separate ignored local validation area. Its B26 baseline is
-  immutable; Google Drive is the authoritative shared checkpoint.
+- `catalog/B26/` is a separate ignored local validation area. **Revised
+  2026-08-04**: `catalog/B26/` is now Claude's real local working copy, not a
+  read-only/immutable checkpoint; Google Drive is the backup, not the
+  authoritative source, once the local copy has been materialized. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`.
 - `Downloads/` is immutable intake. `archive/` holds non-authoritative local
   historical material, including the manual Drive mirror.
+- **Decided 2026-08-04**: `Downloads/` and `archive/` are not recreated on
+  new machines/Codespaces going forward — both are non-authoritative by
+  this file's own long-standing description, and Drive remains the backup
+  if anything in them is ever needed. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`.
 - Current catalog: Drive `BG3/CATALOG`, including its `B26_DATABASE_BASELINE`.
 - Source data belongs in Drive `BG3/SOURCES`; Drive `ARCHIVE` is never an
   authoritative input.
@@ -40,7 +48,8 @@ on-disk location)
     `bg3_modio_audit.db`, `bg3_modio_data.zip`,
     `BG3_Modio_Normalized_Package_v0_1.zip`.
   - `data/nexus/` — `nexus_bg3_scraper.py`'s June 2026
-    full sweep (16,191 mods: metadata/files/changelogs/dependencies).
+    full sweep (18,570 distinct mod IDs, 13,864 with full published metadata:
+    metadata/files/changelogs/dependencies).
     Confirmed 2026-07-24 via a full Drive sweep (byte-identical file sizes
     against the Drive-side `10_SOURCE_CORPORA/03_NEXUS_API_BASE_2026-06-28/`
     copy) that this really is that script's own output, just renamed/moved
@@ -57,6 +66,11 @@ on-disk location)
     Collections sweep output.
 - `app/manifests/` — small tracked provenance docs (checksums, per-mod counts)
   for the mod.io captures.
+- `app/catalog_pipeline/` — the B26 database-build pipeline, materialized
+  from Drive into this repo 2026-08-04 (see
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`).
+  Distinct from `app/scripts/` (scraper-only). The actual `.db` files it
+  operates on live in `catalog/B26/` (gitignored, same as `data/`).
 - `Google Drive/` — untracked local mirror of a handful of shared control
   docs pulled from the Drive project (roadmap, work delineation, checkpoint
   policy, latest status doc) — **not** a full Drive sync, just what's been
@@ -109,20 +123,18 @@ there.
   machines as a manually-carried zip, not through git.
 - Repo: https://github.com/jasonmichaelbell78-creator/bg3_scraper (renamed
   from `bg3_nexus_scraper` — it's not Nexus-only anymore).
-- **Standing project directive (2026-07-24): keep Google Drive updated for
-  ChatGPT/Codex's use whenever there's a meaningful update, moving forward.**
-  Codex does not have GitHub access to this repo — its only visibility into
-  this project's state is the manually-synced Google Drive folder, so this
-  file being current on GitHub is not sufficient on its own. No Drive
-  file-update/delete tool exists (only create/copy), so each sync creates a
-  new file — use a clearly dated name, note in the new file's own text which
-  older file(s) it supersedes, and leave the superseded ones for the user to
-  clean up manually. Two locations matter: a full copy of this file goes in
-  `30_SCRAPER_PROJECTS/BG3Scraper_Active/` (buried, technical-detail copy),
-  and a short human-readable summary goes at the **top level** of the `BG3`
-  Drive folder (alongside `00_SHARED_PROJECT_ROADMAP.md` and
-  `01_CHATGPT_CLAUDE_WORK_DELINEATION.md`) — a file three folders deep is
-  not something Codex will ever think to look for on its own.
+- **Standing project directive (revised 2026-08-04): the project now runs
+  primarily out of Claude Code, with Drive as backup and an optional
+  second-opinion channel rather than a mandatory sync target.** Update
+  Drive when it's actually useful — a backup snapshot of a large artifact,
+  or a status doc when Codex's independent review is wanted — not
+  automatically after every commit. The old multi-step "conference packet"
+  ceremony (dated status docs kept in lockstep pairs, `C1`–`C7` gate
+  numbering per `00_SHARED_PROJECT_ROADMAP.md`) is retired as a mandatory
+  process; a single current-state doc dropped in Drive is sufficient when
+  a second opinion is wanted. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`
+  for the full reasoning.
 - `gh` CLI: was missing/broken for a long time (wrapper pointed to a deleted
   path) — git operations used `git` directly with a cached Windows Credential
   Manager credential instead. **Fixed 2026-07-24**: reinstalled fresh from the
@@ -164,7 +176,8 @@ there.
 
 ## Nexus Mods — comments gap: INVESTIGATED, not yet built
 - `nexus_bg3_scraper.py` fully scraped metadata/files/changelogs/dependencies
-  for 16,191 mods (June 2026). Its comment fetch calls a
+  for 18,570 distinct mod IDs (13,864 with full published metadata; June 2026).
+  Its comment fetch calls a
   `{mod_id}/comments.json` endpoint on the v1 REST API that **does not
   exist** — always 404s, silently treated as "no comments." Nexus's REST v1
   API has no comments endpoint at all.
@@ -208,7 +221,7 @@ there.
     pan out; pagination has to walk one page at a time regardless.
   - No login/session cookie was needed for read access otherwise — comments
     loaded fully while anonymous.
-- Scope: not all 16,191 mods — `BG3_Nexus_Tier1_Tier2_Mods.csv` (3,662 curated
+- Scope: not all 18,570 distinct mod IDs — `BG3_Nexus_Tier1_Tier2_Mods.csv` (3,662 curated
   mods, both tiers, columns include `nexus_mod_id`/`nexus_url`) is the
   target list, prioritized by endorsements/dependency usage/category
   ranking. Decided: target **all 3,662** (not just Tier 1) once built.
