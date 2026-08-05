@@ -39,19 +39,28 @@ companion database or a stale, mod.io-only table.
 ## Scope
 
 **In scope:**
-- Ingest all 527,928 comments (both platforms) into `evidence_source_records`,
-  sourced from Phase 2B's `comments` table rather than re-parsing the raw
-  merged JSONL files separately — Phase 2B's table is a strict superset
-  (already deduplicated, threaded, and linked to `platform_listings`;
-  76,043 mod.io + 451,885 Nexus = 527,928, confirmed to reconcile exactly).
-  This single source closes gaps (a) and (b) together, per the findings
-  doc's own recommendation to do them as one migration.
-- Promote 16,996 `triage_hits` into `evidence_claims`, tagged
+- Ingest the **451,885 Nexus comments** from Phase 2B's `comments` table
+  into `evidence_source_records`, sourced from Phase 2B rather than
+  re-parsing `nexus_comments_merged.jsonl` directly — Phase 2B's table is a
+  strict superset (already deduplicated, threaded, and linked to
+  `platform_listings`). **Correction (2026-08-05, caught during planning,
+  verified against live data): mod.io's 76,043 comments are NOT re-inserted
+  — a set-membership check confirmed B26's existing
+  `evidence_source_records` (corpora `f12290b9…`/`e88d8457…`) already holds
+  the exact same 76,043 mod.io comment IDs Phase 2B has (100% overlap,
+  zero difference). Re-inserting them from Phase 2B would have silently
+  created 76,043 duplicate rows.** The original design's "527,928 in one
+  bulk insert" was wrong; Nexus is genuinely new, mod.io is not.
+- Promote all 16,996 `triage_hits` into `evidence_claims` (2,016 mod.io +
+  14,980 Nexus — both platforms, unlike the comment insert above), tagged
   `evidence_state='triage_only'` — explicitly unvalidated regex hits, not
-  confirmed facts. (Landing them now with an honest "unvalidated" label is
-  different from citing them as evidence; the precision/recall measurement
-  that would justify treating them as more than that is separate follow-up
-  work, not a blocker to storing them queryably.)
+  confirmed facts. Nexus-derived claims link to the newly inserted Nexus
+  `evidence_source_records` rows; mod.io-derived claims link to the
+  *existing* mod.io rows (looked up by comment ID, not re-inserted).
+  (Landing them now with an honest "unvalidated" label is different from
+  citing them as evidence; the precision/recall measurement that would
+  justify treating them as more than that is separate follow-up work, not
+  a blocker to storing them queryably.)
 - Retire `mod_comments`: drop the table, replace it with a view over
   `evidence_source_records` — confirmed via repo-wide search that nothing
   else in the codebase reads or writes it, so this is low-risk.
@@ -111,18 +120,26 @@ checkpoint.
    Any mismatch: `ROLLBACK`, fix the script, retry from step 3.
 5. Once the test batch checks out: `ROLLBACK` it (clean slate), then run
    the real migration in a fresh transaction:
-   - New `evidence_corpora` row(s) recording this ingestion, with
-     `supersedes_corpus_uuid` pointing at the corpora being superseded
-     (the `not_collected` Nexus placeholder `cc2ea89e-3980-552e-
-     aeb3-4c7e6056a3a1`, and the superseded partial mod.io capture chain
-     rooted at `fd77c412-bd85-568e-8f52-f4cd59b142bc`) — exact corpus-row
-     bookkeeping (one row vs. per-platform rows) is an implementation
-     decision, not fixed here.
-   - Bulk-insert 527,928 `evidence_source_records` rows from Phase 2B's
-     `comments` table (`source_listing_uuid` copied directly from Phase
-     2B's already-verified `b26_listing_uuid` — no re-resolution needed).
-   - Promote 16,996 `triage_hits` → `evidence_claims`
-     (`evidence_state='triage_only'`).
+   - New `evidence_corpora` row recording this ingestion, with
+     `supersedes_corpus_uuid` pointing at the `not_collected` Nexus
+     placeholder (`cc2ea89e-3980-552e-aeb3-4c7e6056a3a1`) — mod.io's
+     corpora (`f12290b9…`/`e88d8457…`) are untouched, not superseded,
+     since mod.io data isn't being re-inserted.
+   - Bulk-insert **451,885** `evidence_source_records` rows for **Nexus
+     only** from Phase 2B's `comments` table WHERE `platform='nexus'`
+     (`source_listing_uuid` copied directly from Phase 2B's
+     already-verified `b26_listing_uuid` — no re-resolution needed).
+     mod.io rows are NOT touched — confirmed via set-membership check that
+     B26 already holds the exact same 76,043 mod.io comment IDs Phase 2B
+     has.
+   - Promote all 16,996 `triage_hits` → `evidence_claims`
+     (`evidence_state='triage_only'`) — both platforms. Nexus-derived
+     claims (14,980) link via `evidence_claim_links` to the
+     newly-inserted Nexus rows above; mod.io-derived claims (2,016) link
+     to the pre-existing mod.io rows, found by looking up each
+     `comments.source_comment_id` against
+     `evidence_source_records.provider_native_id` within the existing
+     mod.io corpora — not inserted.
    - `DROP TABLE mod_comments`; `CREATE VIEW mod_comments AS ...` — a
      fresh, sensible shape over `evidence_source_records`, not a shim
      preserving the old (structurally broken) table's columns.
@@ -160,19 +177,25 @@ own receipt (per this project's standing preference: scripted batch work
 needs thorough post-examination via direct analysis, not just a clean exit
 code):
 
-1. `evidence_source_records` grew by exactly 527,928 rows, all with
+1. `evidence_source_records` grew by exactly **451,885** rows (Nexus only —
+   mod.io's existing 76,043 rows are untouched, count unchanged), all with
    non-null `content_sha256`/`payload_json`.
-2. All 527,928 new rows have non-null `source_listing_uuid` (matches Phase
-   2B's own "zero dangling" result).
-3. `evidence_claims` grew by exactly 16,996 rows, all
-   `evidence_state='triage_only'`.
+2. All 451,885 new rows have non-null `source_listing_uuid` (matches Phase
+   2B's own "zero dangling" result for Nexus).
+3. `evidence_claims` grew by exactly 16,996 rows (both platforms), all
+   `evidence_state='triage_only'`; `evidence_claim_links` grew by exactly
+   16,996 rows, each resolving to a real `evidence_source_records` row —
+   14,980 to the newly-inserted Nexus rows, 2,016 to the pre-existing
+   mod.io rows.
 4. `mod_comments` is now a view, not a table; querying it returns data;
    nothing else in the repo that referenced the old table breaks (confirmed
    nothing currently does).
 5. `PRAGMA integrity_check` and `PRAGMA foreign_key_check` both clean on
    the final committed DB.
 6. A fresh random sample of ≥20 rows spot-checked field-by-field against
-   Phase 2B's source data (distinct from the test-batch sample).
+   Phase 2B's source data (distinct from the test-batch sample) — including
+   at least a few mod.io-linked `evidence_claims` rows, to confirm the
+   lookup-not-insert path for mod.io worked correctly.
 7. Backup file exists on disk with its checksum recorded, for recovery if
    a problem surfaces later despite the above.
 
