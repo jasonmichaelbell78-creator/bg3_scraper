@@ -173,6 +173,28 @@ there.
   `manifest_modio_comments.md` / `.json`, with per-mod counts in
   `manifest_modio_per_mod.csv` — written in response to a ChatGPT audit
   request cross-checking this dataset.
+- **Incident, found and fixed 2026-08-05**: the local
+  `data/modio/full_sweep/modio_comments_merged.jsonl` was actually the
+  **superseded pre-dedup v1.0 merge** (76,171 rows, 128 duplicate comment
+  IDs, SHA-256 `ef2c9360...`), not the canonical v1.1 file Codex's Phase
+  2A/2B build actually used (76,043 rows, SHA-256 `bcd546e9...` — confirmed
+  directly with Codex, who supplied the canonical hash/row/byte counts and
+  two spot-check comment IDs). Root cause: the two hashes' byte counts
+  differed by exactly one byte per row, which turned out to be a **line-
+  ending artifact** (CRLF vs LF) from the original v1.1 run — content is
+  otherwise byte-identical. Fixed by regenerating via
+  `modio_merge_comments.py` (its two inputs, `modio_comments_fullsweep.jsonl`
+  and `modio_comments_deep_refresh.jsonl`, were both still present and
+  correct) and writing the output with CRLF line endings to match —
+  verified the result hashes to the exact canonical `bcd546e9...` Codex
+  confirmed. No data was ever lost (both merge inputs were intact); this
+  was a stale-artifact bug like the `nexus_comments_merged.jsonl`
+  regression above, not a repeat of it. Caught while brainstorming the B26
+  Phase 3 comment-evidence migration, cross-checking Phase 2B's recorded
+  `source_corpus_sha256` against local files as due diligence before
+  writing an implementation plan that would depend on this file's
+  correctness — same "verify before trusting a local copy" lesson as that
+  earlier incident.
 
 ## Nexus Mods — comments gap: INVESTIGATED, not yet built
 - `nexus_bg3_scraper.py` fully scraped metadata/files/changelogs/dependencies
