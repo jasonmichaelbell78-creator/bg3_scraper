@@ -12,8 +12,11 @@ This section supersedes older layout references below when they conflict.
 
 - `app/scripts/` and `app/manifests/` remain the active, tracked scraper project.
 - Local scraped outputs are under `data/`; they are intentionally ignored by Git.
-- `catalog/B26/` is a separate ignored local validation area. Its B26 baseline is
-  immutable; Google Drive is the authoritative shared checkpoint.
+- `catalog/B26/` is a separate ignored local validation area. **Revised
+  2026-08-04**: `catalog/B26/` is now Claude's real local working copy, not a
+  read-only/immutable checkpoint; Google Drive is the backup, not the
+  authoritative source, once the local copy has been materialized. See
+  `docs/superpowers/specs/2026-08-04-consolidate-into-claude-code-design.md`.
 - `Downloads/` is immutable intake. `archive/` holds non-authoritative local
   historical material, including the manual Drive mirror.
 - **Decided 2026-08-04**: `Downloads/` and `archive/` are not recreated on
@@ -45,7 +48,8 @@ on-disk location)
     `bg3_modio_audit.db`, `bg3_modio_data.zip`,
     `BG3_Modio_Normalized_Package_v0_1.zip`.
   - `data/nexus/` — `nexus_bg3_scraper.py`'s June 2026
-    full sweep (16,191 mods: metadata/files/changelogs/dependencies).
+    full sweep (18,570 distinct mod IDs, 13,864 with full published metadata:
+    metadata/files/changelogs/dependencies).
     Confirmed 2026-07-24 via a full Drive sweep (byte-identical file sizes
     against the Drive-side `10_SOURCE_CORPORA/03_NEXUS_API_BASE_2026-06-28/`
     copy) that this really is that script's own output, just renamed/moved
@@ -172,7 +176,8 @@ there.
 
 ## Nexus Mods — comments gap: INVESTIGATED, not yet built
 - `nexus_bg3_scraper.py` fully scraped metadata/files/changelogs/dependencies
-  for 16,191 mods (June 2026). Its comment fetch calls a
+  for 18,570 distinct mod IDs (13,864 with full published metadata; June 2026).
+  Its comment fetch calls a
   `{mod_id}/comments.json` endpoint on the v1 REST API that **does not
   exist** — always 404s, silently treated as "no comments." Nexus's REST v1
   API has no comments endpoint at all.
@@ -216,7 +221,7 @@ there.
     pan out; pagination has to walk one page at a time regardless.
   - No login/session cookie was needed for read access otherwise — comments
     loaded fully while anonymous.
-- Scope: not all 16,191 mods — `BG3_Nexus_Tier1_Tier2_Mods.csv` (3,662 curated
+- Scope: not all 18,570 distinct mod IDs — `BG3_Nexus_Tier1_Tier2_Mods.csv` (3,662 curated
   mods, both tiers, columns include `nexus_mod_id`/`nexus_url`) is the
   target list, prioritized by endorsements/dependency usage/category
   ranking. Decided: target **all 3,662** (not just Tier 1) once built.
