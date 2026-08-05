@@ -514,3 +514,14 @@ structurally hold both platforms. Recommend retiring it behind a view over
 - Remove or supersede the contradictory `b26_reference_db` key in Phase 2B's `build_metadata`.
 - Replace the hardcoded thread-link figures in `report_phase2_comment_evidence_index.py:54` with interpolated values.
 - Close the (a) and (b) gaps in a **single** migration — they insert into the same table from the same corpora, and splitting them doubles the validation work.
+
+## Decision (2026-08-05)
+
+**Decision: ADOPT Codex's B26 pipeline**, with the three conditions above (taxonomy
+precedence fix, triage precision/recall baseline, explicit `mod_comments` retirement
+decision) queued as follow-up work rather than blockers to adoption itself. Jason
+accepted this session's recommendation as presented, delegating the call
+("proceed with your suggestions") rather than overriding it. Per this plan's scope
+boundary, no B26 content-migration work (comment ingestion, evidence-index
+promotion) proceeds under this plan — the three conditions and the "also worth
+doing" items above become their own follow-up spec.
