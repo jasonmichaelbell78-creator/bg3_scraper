@@ -1,5 +1,6 @@
 import hashlib
 import json
+import os
 import sqlite3
 import tempfile
 import unittest
@@ -638,3 +639,43 @@ class TestFullMigration(unittest.TestCase):
             "evidence_claims row count changed -- second run partially "
             "double-inserted instead of failing cleanly",
         )
+
+    def test_run_migration_succeeds_with_relative_paths(self):
+        # Regression test for N1: candidate_db_path.as_uri() (and the same
+        # bug for phase2b_conn's read-only open) raised ValueError on a
+        # relative path because Path.as_uri() requires an absolute path.
+        # That crash happened AFTER candidate_conn.commit(), so a relative
+        # --db -- which is how this project's own docs/CLAUDE.md always
+        # refer to the target DB -- meant the migration fully committed,
+        # then blew up on post-commit validation, skipping
+        # integrity_check/foreign_key_check and never writing the receipt.
+        # Reproduce that exact shape here: chdir into the fixture tempdir
+        # and pass bare (relative) filenames straight through to
+        # run_migration, rather than the absolute paths setUp() built.
+        original_cwd = os.getcwd()
+        os.chdir(self.tmpdir.name)
+        try:
+            relative_candidate = Path(self.candidate_path.name)
+            relative_phase2b = Path(self.phase2b_path.name)
+            relative_receipt = Path(self.receipt_path.name)
+            self.assertFalse(relative_candidate.is_absolute())
+            self.assertFalse(relative_phase2b.is_absolute())
+
+            summary = run_migration(
+                relative_candidate, relative_phase2b,
+                expected_candidate_sha256=self.candidate_sha,
+                expected_phase2b_sha256=self.phase2b_sha,
+                migration_name="test_migration_relative_paths",
+                receipt_path=relative_receipt,
+            )
+        finally:
+            os.chdir(original_cwd)
+
+        self.assertEqual(summary["nexus_evidence_rows_inserted"], 3)
+        self.assertEqual(summary["claims_promoted"], 3)
+        self.assertTrue(self.receipt_path.exists())
+        con = sqlite3.connect(self.candidate_path)
+        migration_row = con.execute(
+            "SELECT migration_name FROM migration_history"
+        ).fetchone()
+        self.assertEqual(migration_row[0], "test_migration_relative_paths")
