@@ -886,6 +886,52 @@ feeds into), but noted here so it isn't lost between sessions.
   diff its row count / mtime against the most recent CLAUDE.md entry for
   that file first.
 
+## B26 Phase 3: comment-evidence migration — COMPLETE (2026-08-06)
+- Design (`docs/superpowers/specs/2026-08-05-b26-phase3-comment-evidence-migration-design.md`)
+  and implementation plan (`docs/superpowers/plans/2026-08-05-b26-phase3-comment-evidence-migration.md`)
+  built via TDD, Tasks 1-8, in `app/catalog_pipeline/claude_phase3/promote_comment_evidence.py`
+  — backup/hash-gate utilities, deterministic ID/hash/payload builders, Nexus
+  `evidence_corpora`/`evidence_source_records` insert (Nexus-only — mod.io
+  comments were already present from Phase 2B and are looked up, not
+  re-inserted), `triage_hits` → `evidence_claims`/`evidence_claim_links`
+  promotion, `mod_comments` retirement (table dropped, replaced by a
+  same-named view over the new evidence tables so nothing downstream
+  breaks), test-batch orchestration with rollback, full `run_migration` CLI
+  with post-commit validation. 36/36 tests passing. Pushed and merged to
+  remote `main` via PR #1 (`2047d95`) — the repo's `block_push_to_main.py`
+  hook requires a feature-branch PR for any push to `main`, direct pushes
+  are rejected.
+- **Task 9 (the real migration run) executed 2026-08-06** against
+  `catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db`,
+  sourcing from `catalog/B26/BG3_Comment_Evidence_Index_Phase2B_B26ExactLinks_candidate.db`.
+  Pre-migration checksums verified against the plan's recorded baseline
+  first (per this project's standing "never proceed past an unexplained
+  checksum mismatch" rule). Result: `nexus_evidence_rows_inserted: 451885`,
+  `claims_promoted: 16996` — both exact matches to the design's predicted
+  numbers. `evidence_source_records` 331,571 → 783,456; `evidence_claims`
+  136 → 17,132.
+- **Independently verified (not just the script's own receipt), all
+  passed**: row-count arithmetic reconciles exactly; zero NULL
+  `content_sha256`/`payload_json` on the new rows; zero dangling
+  `source_listing_uuid` within the migration's own new Nexus corpus
+  (`781689d0-...`) — a raw unscoped query surfaces 16,955 dangling rows,
+  but those all belong to a separate, pre-existing, unrelated legacy corpus
+  (`nexus_structured_2026-06-28` from the original June sweep), not this
+  migration's output, so this isn't a defect, just a plan-verification-query
+  scoping gap worth knowing about if this check is ever re-run; `mod_comments`
+  confirmed retired to a view returning real data (584,161 rows), no
+  unexpected code references outside the historical gap-report doc;
+  `PRAGMA integrity_check` → `ok`, zero foreign-key violations; a 20-row
+  direct field-by-field spot-check against Phase 2B source data (bypassing
+  the migration's own functions) found 0 mismatches, and confirmed the
+  mod.io lookup-not-insert path actually links real rows; backup file
+  exists and its checksum matches the pre-migration hash exactly: the
+  original is provably untouched; `git status` stayed clean throughout —
+  `catalog/` is gitignored, nothing about this migration touches git.
+- Worktree cleanup done same session: removed the stale
+  `worktree-b26-phase3-comment-evidence` worktree/branch (local + remote,
+  confirmed superseded — missing Tasks 6-8 that landed on `main`).
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
@@ -936,6 +982,12 @@ feeds into), but noted here so it isn't lost between sessions.
    `02_NEXUS_SCRAPER_STATUS_2026-07-25_v4.md` per the standing directive.
    **All Claude-side items from this session are complete** — the C5
    conference with ChatGPT/Codex can proceed.
+10. B26 Phase 3 comment-evidence migration (see dedicated section above) --
+    **complete, 2026-08-06**. Code (Tasks 1-8) merged to remote `main` via
+    PR #1; the real migration (Task 9) ran against the live candidate DB and
+    passed full independent verification. Remaining loose end: none for
+    Phase 3 itself; next open item project-wide is item 8 (Load Order
+    Guidance doc research), not otherwise progressed this session.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.
