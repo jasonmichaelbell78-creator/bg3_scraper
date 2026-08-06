@@ -320,3 +320,26 @@ class TestTriagePromotion(unittest.TestCase):
         # empty maps -- every hit's comment has no matching evidence row
         with self.assertRaises(RuntimeError):
             promote_triage_hits(self.candidate, self.phase2b, {}, {})
+
+    def test_promote_triage_hits_mixed_failure_writes_nothing(self):
+        # Realistic mixed case: 2 of the fixture's 3 triage hits CAN resolve
+        # (hit_id=1 nexus/555001, hit_id=2 modio/9001) and 1 CANNOT
+        # (hit_id=3 modio/9003 -- deliberately left out of the map). This
+        # proves the "not optional" hard data-integrity guarantee even when
+        # failure isn't total: the implementation only inserts after the
+        # full skip-check completes, so a single unresolved hit among
+        # otherwise-resolvable ones must still leave zero rows written.
+        full_modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        self.assertIn("9001", full_modio_map)
+        self.assertIn("9003", full_modio_map)  # confirms it's excluded on purpose below
+        partial_modio_map = {"9001": full_modio_map["9001"]}
+
+        with self.assertRaises(RuntimeError):
+            promote_triage_hits(
+                self.candidate, self.phase2b, self.nexus_uuid_by_comment_id, partial_modio_map
+            )
+
+        claim_count = self.candidate.execute("SELECT COUNT(*) FROM evidence_claims").fetchone()[0]
+        link_count = self.candidate.execute("SELECT COUNT(*) FROM evidence_claim_links").fetchone()[0]
+        self.assertEqual(claim_count, 0)
+        self.assertEqual(link_count, 0)
