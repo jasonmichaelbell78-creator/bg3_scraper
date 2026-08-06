@@ -16,6 +16,10 @@ from app.catalog_pipeline.claude_phase3.promote_comment_evidence import (
     build_raw_locator,
     RULE_TO_CLAIM_TYPE,
 )
+from app.catalog_pipeline.claude_phase3.tests.fixtures import (
+    create_fixture_candidate_db,
+    create_fixture_phase2b_db,
+)
 
 
 class TestHashUtilities(unittest.TestCase):
@@ -128,3 +132,46 @@ class TestBuilders(unittest.TestCase):
         self.assertEqual(RULE_TO_CLAIM_TYPE["relative_load_order"], "load_order")
         for rule in ("file_variant_advice", "named_patch_addon", "acquisition_content", "author_context"):
             self.assertEqual(RULE_TO_CLAIM_TYPE[rule], "compatibility")
+
+
+class TestFixtures(unittest.TestCase):
+    def test_fixture_candidate_db_has_expected_tables(self):
+        con = sqlite3.connect(":memory:")
+        create_fixture_candidate_db(con)
+        tables = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        self.assertEqual(
+            tables,
+            {
+                "evidence_corpora", "evidence_source_records", "evidence_claims",
+                "evidence_claim_links", "mod_comments", "platform_listings",
+                "migration_history", "ingestion_stage_receipts",
+            },
+        )
+        # seeded: 2 pre-existing modio corpora, 3 sample modio evidence rows
+        corpora = con.execute("SELECT COUNT(*) FROM evidence_corpora WHERE provider='modio'").fetchone()[0]
+        self.assertEqual(corpora, 2)
+        modio_rows = con.execute("SELECT COUNT(*) FROM evidence_source_records").fetchone()[0]
+        self.assertEqual(modio_rows, 3)
+
+    def test_fixture_phase2b_db_has_expected_tables_and_seed_data(self):
+        con = sqlite3.connect(":memory:")
+        create_fixture_phase2b_db(con)
+        tables = {r[0] for r in con.execute(
+            "SELECT name FROM sqlite_master WHERE type='table'"
+        )}
+        self.assertEqual(tables, {"comments", "triage_hits", "triage_rule_catalog"})
+        rule_count = con.execute("SELECT COUNT(*) FROM triage_rule_catalog").fetchone()[0]
+        self.assertEqual(rule_count, 7)
+        nexus_count = con.execute("SELECT COUNT(*) FROM comments WHERE platform='nexus'").fetchone()[0]
+        modio_count = con.execute("SELECT COUNT(*) FROM comments WHERE platform='modio'").fetchone()[0]
+        self.assertGreater(nexus_count, 0)
+        self.assertGreater(modio_count, 0)
+        # the 3 modio comments in the phase2b fixture must match the 3 seeded
+        # in the candidate fixture (same source_comment_id values), so
+        # Task 4's mod.io lookup-not-insert path has something real to find
+        modio_ids = {r[0] for r in con.execute(
+            "SELECT source_comment_id FROM comments WHERE platform='modio'"
+        )}
+        self.assertEqual(modio_ids, {"9001", "9002", "9003"})
