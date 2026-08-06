@@ -247,3 +247,22 @@ def promote_triage_hits(
         link_rows,
     )
     return len(claim_rows)
+
+
+def retire_mod_comments_table(conn: sqlite3.Connection) -> None:
+    conn.execute("DROP TABLE mod_comments")
+    conn.execute(
+        """CREATE VIEW mod_comments AS
+           SELECT
+               esr.source_record_uuid AS comment_uuid,
+               ec.provider AS platform,
+               esr.provider_native_id AS source_comment_id,
+               esr.source_listing_uuid AS listing_uuid,
+               esr.parent_provider_native_id AS parent_source_comment_id,
+               esr.displayed_author AS author,
+               esr.observed_at AS observed_at,
+               esr.payload_json AS payload_json
+           FROM evidence_source_records esr
+           JOIN evidence_corpora ec ON ec.corpus_uuid = esr.corpus_uuid
+           WHERE esr.provider_object_type = 'comment'"""
+    )

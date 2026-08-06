@@ -343,3 +343,36 @@ class TestTriagePromotion(unittest.TestCase):
         link_count = self.candidate.execute("SELECT COUNT(*) FROM evidence_claim_links").fetchone()[0]
         self.assertEqual(claim_count, 0)
         self.assertEqual(link_count, 0)
+
+
+from app.catalog_pipeline.claude_phase3.promote_comment_evidence import retire_mod_comments_table
+
+
+class TestRetireModComments(unittest.TestCase):
+    def setUp(self):
+        self.candidate = sqlite3.connect(":memory:")
+        create_fixture_candidate_db(self.candidate)
+        self.phase2b = sqlite3.connect(":memory:")
+        create_fixture_phase2b_db(self.phase2b)
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        insert_nexus_evidence_source_records(self.candidate, self.phase2b, corpus_uuid)
+
+    def test_mod_comments_becomes_a_view_not_a_table(self):
+        retire_mod_comments_table(self.candidate)
+        row = self.candidate.execute(
+            "SELECT type FROM sqlite_master WHERE name='mod_comments'"
+        ).fetchone()
+        self.assertEqual(row[0], "view")
+
+    def test_mod_comments_view_returns_evidence_data(self):
+        retire_mod_comments_table(self.candidate)
+        count = self.candidate.execute("SELECT COUNT(*) FROM mod_comments").fetchone()[0]
+        self.assertEqual(count, 6)  # 3 modio fixture rows + 3 nexus rows inserted in setUp
+
+    def test_mod_comments_view_exposes_platform_and_source_comment_id(self):
+        retire_mod_comments_table(self.candidate)
+        row = self.candidate.execute(
+            "SELECT platform, source_comment_id FROM mod_comments LIMIT 1"
+        ).fetchone()
+        self.assertEqual(row[0], "nexus")
+        self.assertIn(row[1], {"555001", "555002", "555003"})
