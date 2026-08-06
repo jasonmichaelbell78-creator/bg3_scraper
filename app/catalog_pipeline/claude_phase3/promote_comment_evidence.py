@@ -13,11 +13,13 @@ mod_comments (drops the table, replaces it with a view).
 See docs/superpowers/specs/2026-08-05-b26-phase3-comment-evidence-migration-design.md
 for the full design and rationale.
 """
+import argparse
 import hashlib
 import json
 import shutil
 import sqlite3
 import uuid
+from datetime import datetime, timezone
 from pathlib import Path
 
 
@@ -328,3 +330,143 @@ def _verify_batch_against_source(
         expected_locator = build_raw_locator("nexus", source_row["source_line_number"])
         if raw_locator != expected_locator:
             raise AssertionError(f"raw_locator mismatch for {source_comment_id}")
+
+
+def _pick_sample_mod_ids(phase2b_conn: sqlite3.Connection, platform: str, *, limit: int) -> list[str]:
+    rows = phase2b_conn.execute(
+        "SELECT DISTINCT platform_mod_id FROM comments WHERE platform = ? LIMIT ?",
+        (platform, limit),
+    ).fetchall()
+    return [r[0] for r in rows]
+
+
+def run_migration(
+    candidate_db_path: Path,
+    phase2b_db_path: Path,
+    *,
+    expected_candidate_sha256: str,
+    expected_phase2b_sha256: str,
+    migration_name: str,
+    receipt_path: Path,
+) -> dict:
+    verify_db_hash(candidate_db_path, expected_candidate_sha256)
+    verify_db_hash(phase2b_db_path, expected_phase2b_sha256)
+
+    # Connections are opened and closed via nested try/finally (a deliberate
+    # deviation from the brief's flat structure -- see task-8-report.md) so
+    # that a failure while opening/preparing the SECOND connection (or the
+    # PRAGMA statement right after the first) can never leak the first
+    # connection unclosed. Everything from here through `commit()` is wrapped
+    # so any exception triggers `candidate_conn.rollback()` before the
+    # exception is re-raised, and both connections are always closed
+    # regardless of outcome.
+    candidate_conn = sqlite3.connect(candidate_db_path)
+    try:
+        candidate_conn.execute("PRAGMA foreign_keys = ON")
+        phase2b_conn = sqlite3.connect(phase2b_db_path)
+        try:
+            row_count_before = candidate_conn.execute(
+                "SELECT COUNT(*) FROM evidence_source_records"
+            ).fetchone()[0]
+
+            # Step 1: test batch, verified, then rolled back (see Task 7)
+            sample_nexus_mods = _pick_sample_mod_ids(phase2b_conn, "nexus", limit=1)
+            sample_modio_mods = _pick_sample_mod_ids(phase2b_conn, "modio", limit=1)
+            run_and_verify_test_batch(
+                candidate_conn, phase2b_conn,
+                nexus_mod_ids=sample_nexus_mods, modio_mod_ids=sample_modio_mods,
+            )
+
+            # Step 2: backup, only after the test batch has proven the logic works
+            backup_path = backup_database(candidate_db_path)
+
+            # Step 3: the real, full migration in a fresh transaction
+            nexus_row_count = phase2b_conn.execute(
+                "SELECT COUNT(*) FROM comments WHERE platform='nexus'"
+            ).fetchone()[0]
+            corpus_uuid = insert_nexus_evidence_corpus(candidate_conn, record_count=nexus_row_count)
+            nexus_uuid_map = insert_nexus_evidence_source_records(
+                candidate_conn, phase2b_conn, corpus_uuid
+            )
+            modio_uuid_map = lookup_existing_modio_evidence_uuids(candidate_conn)
+            claims_promoted = promote_triage_hits(
+                candidate_conn, phase2b_conn, nexus_uuid_map, modio_uuid_map
+            )
+            retire_mod_comments_table(candidate_conn)
+
+            row_count_after = candidate_conn.execute(
+                "SELECT COUNT(*) FROM evidence_source_records"
+            ).fetchone()[0]
+            candidate_conn.execute(
+                """INSERT INTO migration_history
+                   (migration_name, schema_version, applied_at, actor_session,
+                    source_db_sha256, row_count_before, row_count_after, notes)
+                   VALUES (?, ?, ?, ?, ?, ?, ?, ?)""",
+                (
+                    migration_name, "phase3", datetime.now(timezone.utc).isoformat(),
+                    "claude-code-phase3", expected_candidate_sha256,
+                    str(row_count_before), str(row_count_after),
+                    f"Promoted {len(nexus_uuid_map)} Nexus evidence rows, "
+                    f"{claims_promoted} triage claims; retired mod_comments.",
+                ),
+            )
+            candidate_conn.commit()
+        except Exception:
+            candidate_conn.rollback()
+            raise
+        finally:
+            phase2b_conn.close()
+    finally:
+        candidate_conn.close()
+
+    # Post-commit: re-open read-only and validate. Wrapped in its own
+    # try/finally (also a deviation -- see report) so a failure inside
+    # PRAGMA integrity_check/foreign_key_check can't leak this connection.
+    readonly = sqlite3.connect(f"file:{candidate_db_path}?mode=ro&immutable=1", uri=True)
+    try:
+        integrity = readonly.execute("PRAGMA integrity_check").fetchone()[0]
+        fk_violations = readonly.execute("PRAGMA foreign_key_check").fetchall()
+    finally:
+        readonly.close()
+    if integrity != "ok":
+        raise RuntimeError(f"post-commit integrity_check failed: {integrity}")
+    if fk_violations:
+        raise RuntimeError(f"post-commit foreign_key_check found violations: {fk_violations}")
+
+    summary = {
+        "nexus_evidence_rows_inserted": len(nexus_uuid_map),
+        "claims_promoted": claims_promoted,
+        "backup_path": str(backup_path),
+        "row_count_before": row_count_before,
+        "row_count_after": row_count_after,
+    }
+    receipt_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
+    return summary
+
+
+def main() -> None:
+    parser = argparse.ArgumentParser()
+    parser.add_argument("--db", type=Path, required=True)
+    parser.add_argument("--phase2b-db", type=Path, required=True)
+    parser.add_argument("--receipt", type=Path, required=True)
+    parser.add_argument(
+        "--candidate-sha256", default="cb37e0392b7bdb0b06f8095c44b8352363610999498ff4803e07411df3187775"
+    )
+    parser.add_argument(
+        "--phase2b-sha256", default="a7d20f9586a7413f8d1a82ed2965de4cdcb19f942d59400be5896b3e3e72bfaa"
+    )
+    parser.add_argument("--migration-name", default="phase3_promote_comment_evidence_2026-08")
+    args = parser.parse_args()
+
+    summary = run_migration(
+        args.db, args.phase2b_db,
+        expected_candidate_sha256=args.candidate_sha256,
+        expected_phase2b_sha256=args.phase2b_sha256,
+        migration_name=args.migration_name,
+        receipt_path=args.receipt,
+    )
+    print(json.dumps(summary, indent=2, sort_keys=True))
+
+
+if __name__ == "__main__":
+    main()

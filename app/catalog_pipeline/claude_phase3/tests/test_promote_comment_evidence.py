@@ -476,3 +476,124 @@ class TestTestBatchOrchestration(unittest.TestCase):
             "SELECT COUNT(*) FROM evidence_source_records"
         ).fetchone()[0]
         self.assertEqual(evidence_count, baseline_source_records)
+
+
+import shutil
+
+from app.catalog_pipeline.claude_phase3.promote_comment_evidence import run_migration
+
+
+class TestFullMigration(unittest.TestCase):
+    def setUp(self):
+        self.tmpdir = tempfile.TemporaryDirectory()
+        tmp_path = Path(self.tmpdir.name)
+        self.candidate_path = tmp_path / "candidate.db"
+        self.phase2b_path = tmp_path / "phase2b.db"
+        self.receipt_path = tmp_path / "receipt.json"
+
+        candidate_conn = sqlite3.connect(self.candidate_path)
+        create_fixture_candidate_db(candidate_conn)
+        # create_fixture_candidate_db doesn't seed the pre-existing Nexus
+        # "not_collected" placeholder corpus row that insert_nexus_evidence_corpus's
+        # supersedes_corpus_uuid points at (NEXUS_PLACEHOLDER_CORPUS_UUID) --
+        # every other test class in this file calls that function on a
+        # connection that never turns PRAGMA foreign_keys ON, so the missing
+        # row's absence never surfaced. run_migration is the first caller to
+        # enable FK enforcement, and without this row insert_nexus_evidence_corpus
+        # would raise sqlite3.IntegrityError here even though the row genuinely
+        # exists in the real production candidate DB (confirmed directly against
+        # catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db
+        # -- corpus_uuid 'cc2ea89e-3980-552e-aeb3-4c7e6056a3a1', provider='nexus',
+        # coverage_state='not_collected', record counts 0/0). Seeded here (scoped
+        # to this test class only, not the shared fixture) rather than in
+        # tests/fixtures.py, since fixtures.py is relied on by 28 already-passing
+        # tests from Tasks 1-7 that assert `evidence_corpora WHERE provider='nexus'`
+        # counts of exactly 0 pre-migration -- adding it there would make those
+        # assertions wrong without also editing tests outside this task's scope.
+        candidate_conn.execute(
+            "INSERT INTO evidence_corpora VALUES "
+            "('cc2ea89e-3980-552e-aeb3-4c7e6056a3a1','nexus','comments',"
+            "'nexus_comments_2026-06-28',NULL,NULL,"
+            "'not_collected','raw_jsonl_v1',0,0,"
+            "'Raw comments file retained empty; absence is not a no-signal finding.',NULL)"
+        )
+        candidate_conn.commit()
+        candidate_conn.close()
+
+        phase2b_conn = sqlite3.connect(self.phase2b_path)
+        create_fixture_phase2b_db(phase2b_conn)
+        phase2b_conn.close()
+
+        self.candidate_sha = sha256_file(self.candidate_path)
+        self.phase2b_sha = sha256_file(self.phase2b_path)
+
+    def tearDown(self):
+        self.tmpdir.cleanup()
+
+    def test_run_migration_end_to_end_on_fixture_dbs(self):
+        summary = run_migration(
+            self.candidate_path, self.phase2b_path,
+            expected_candidate_sha256=self.candidate_sha,
+            expected_phase2b_sha256=self.phase2b_sha,
+            migration_name="test_migration",
+            receipt_path=self.receipt_path,
+        )
+        self.assertEqual(summary["nexus_evidence_rows_inserted"], 3)
+        self.assertEqual(summary["claims_promoted"], 3)
+
+        con = sqlite3.connect(self.candidate_path)
+        nexus_rows = con.execute(
+            "SELECT COUNT(*) FROM evidence_source_records WHERE corpus_uuid IN "
+            "(SELECT corpus_uuid FROM evidence_corpora WHERE provider='nexus')"
+        ).fetchone()[0]
+        self.assertEqual(nexus_rows, 3)
+        modio_rows_unchanged = con.execute(
+            "SELECT COUNT(*) FROM evidence_source_records WHERE corpus_uuid IN "
+            "('f12290b9-eb19-5c03-86fc-3e2064e4104f','e88d8457-18e1-5f54-8cf1-d0b93a2e6c01')"
+        ).fetchone()[0]
+        self.assertEqual(modio_rows_unchanged, 3)
+        view_type = con.execute(
+            "SELECT type FROM sqlite_master WHERE name='mod_comments'"
+        ).fetchone()[0]
+        self.assertEqual(view_type, "view")
+        migration_row = con.execute(
+            "SELECT migration_name FROM migration_history"
+        ).fetchone()
+        self.assertEqual(migration_row[0], "test_migration")
+
+        self.assertTrue(self.receipt_path.exists())
+        backup_path = self.candidate_path.with_name(self.candidate_path.name + ".pre-phase3-backup")
+        self.assertTrue(backup_path.exists())
+
+    def test_run_migration_aborts_on_hash_mismatch(self):
+        with self.assertRaises(ValueError):
+            run_migration(
+                self.candidate_path, self.phase2b_path,
+                expected_candidate_sha256="0" * 64,
+                expected_phase2b_sha256=self.phase2b_sha,
+                migration_name="test_migration_2",
+                receipt_path=self.receipt_path,
+            )
+        # no backup should have been created -- hash-gate runs before backup
+        backup_path = self.candidate_path.with_name(self.candidate_path.name + ".pre-phase3-backup")
+        self.assertFalse(backup_path.exists())
+
+    def test_run_migration_is_idempotent_gate(self):
+        run_migration(
+            self.candidate_path, self.phase2b_path,
+            expected_candidate_sha256=self.candidate_sha,
+            expected_phase2b_sha256=self.phase2b_sha,
+            migration_name="test_migration_3",
+            receipt_path=self.receipt_path,
+        )
+        # re-running against the now-migrated DB with the SAME migration_name
+        # must fail the hash-gate (the candidate DB's hash has changed) --
+        # proves the migration doesn't silently double-insert
+        with self.assertRaises(ValueError):
+            run_migration(
+                self.candidate_path, self.phase2b_path,
+                expected_candidate_sha256=self.candidate_sha,  # now stale
+                expected_phase2b_sha256=self.phase2b_sha,
+                migration_name="test_migration_3",
+                receipt_path=self.receipt_path,
+            )

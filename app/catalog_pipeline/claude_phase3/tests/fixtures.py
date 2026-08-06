@@ -149,6 +149,18 @@ def create_fixture_candidate_db(conn: sqlite3.Connection) -> None:
         "INSERT INTO platform_listings (mod_uid, platform, platform_mod_id, listing_uuid) "
         "VALUES (1, 'modio', '4320786', 'fixture-listing-uuid-modio-4320786')"
     )
+    # Nexus counterpart -- the phase2b fixture's nexus comments (mod 14077,
+    # below) carry b26_listing_uuid='fixture-listing-uuid-nexus-14077', which
+    # insert_nexus_evidence_source_records copies straight into
+    # evidence_source_records.source_listing_uuid (an FK to this table). No
+    # existing test asserts an exact platform_listings row count, so adding
+    # this is safe for every already-passing test that uses this fixture;
+    # it was missing purely because no test before Task 8's run_migration
+    # ever ran with PRAGMA foreign_keys = ON, so the gap never surfaced.
+    conn.execute(
+        "INSERT INTO platform_listings (mod_uid, platform, platform_mod_id, listing_uuid) "
+        "VALUES (2, 'nexus', '14077', 'fixture-listing-uuid-nexus-14077')"
+    )
     for i, comment_id in enumerate(("9001", "9002"), start=1):
         conn.execute(
             "INSERT INTO evidence_source_records VALUES "
