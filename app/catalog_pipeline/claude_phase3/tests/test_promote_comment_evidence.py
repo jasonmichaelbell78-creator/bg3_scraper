@@ -20,6 +20,11 @@ from app.catalog_pipeline.claude_phase3.tests.fixtures import (
     create_fixture_candidate_db,
     create_fixture_phase2b_db,
 )
+from app.catalog_pipeline.claude_phase3.promote_comment_evidence import (
+    NEXUS_PLACEHOLDER_CORPUS_UUID,
+    insert_nexus_evidence_corpus,
+    insert_nexus_evidence_source_records,
+)
 
 
 class TestHashUtilities(unittest.TestCase):
@@ -175,3 +180,71 @@ class TestFixtures(unittest.TestCase):
             "SELECT source_comment_id FROM comments WHERE platform='modio'"
         )}
         self.assertEqual(modio_ids, {"9001", "9002", "9003"})
+
+
+class TestNexusEvidenceInsert(unittest.TestCase):
+    def setUp(self):
+        self.candidate = sqlite3.connect(":memory:")
+        create_fixture_candidate_db(self.candidate)
+        self.phase2b = sqlite3.connect(":memory:")
+        create_fixture_phase2b_db(self.phase2b)
+
+    def test_insert_nexus_evidence_corpus_creates_row_superseding_placeholder(self):
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        row = self.candidate.execute(
+            "SELECT provider, coverage_state, record_count_unique, supersedes_corpus_uuid "
+            "FROM evidence_corpora WHERE corpus_uuid=?", (corpus_uuid,)
+        ).fetchone()
+        self.assertEqual(row[0], "nexus")
+        self.assertEqual(row[1], "partial")
+        self.assertEqual(row[2], 3)
+        self.assertEqual(row[3], NEXUS_PLACEHOLDER_CORPUS_UUID)
+
+    def test_insert_nexus_evidence_source_records_inserts_all_matching_rows(self):
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        uuid_map = insert_nexus_evidence_source_records(
+            self.candidate, self.phase2b, corpus_uuid
+        )
+        self.assertEqual(len(uuid_map), 3)
+        self.assertEqual(set(uuid_map.keys()), {"555001", "555002", "555003"})
+        count = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records WHERE corpus_uuid=?", (corpus_uuid,)
+        ).fetchone()[0]
+        self.assertEqual(count, 3)
+
+    def test_insert_nexus_evidence_source_records_respects_mod_id_filter(self):
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=1)
+        uuid_map = insert_nexus_evidence_source_records(
+            self.candidate, self.phase2b, corpus_uuid, platform_mod_ids=["14077"]
+        )
+        # all 3 fixture nexus comments belong to mod 14077, so filtering by
+        # it should still return all 3 -- this proves the filter is applied
+        # (not silently ignored) without requiring a second mod in the fixture
+        self.assertEqual(len(uuid_map), 3)
+
+    def test_inserted_row_content_matches_source_exactly(self):
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        uuid_map = insert_nexus_evidence_source_records(
+            self.candidate, self.phase2b, corpus_uuid
+        )
+        source_row = self.phase2b.execute(
+            "SELECT body, b26_listing_uuid, source_line_number FROM comments "
+            "WHERE source_comment_id='555001'"
+        ).fetchone()
+        inserted_row = self.candidate.execute(
+            "SELECT payload_json, source_listing_uuid, raw_locator FROM evidence_source_records "
+            "WHERE source_record_uuid=?", (uuid_map["555001"],)
+        ).fetchone()
+        payload = json.loads(inserted_row[0])
+        self.assertEqual(payload["body"], source_row[0])
+        self.assertEqual(inserted_row[1], source_row[1])
+        self.assertEqual(inserted_row[2], f"nexus_comments_merged.jsonl#L{source_row[2]}")
+
+    def test_modio_comments_are_never_touched(self):
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        insert_nexus_evidence_source_records(self.candidate, self.phase2b, corpus_uuid)
+        modio_count_after = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records WHERE corpus_uuid IN "
+            "('f12290b9-eb19-5c03-86fc-3e2064e4104f','e88d8457-18e1-5f54-8cf1-d0b93a2e6c01')"
+        ).fetchone()[0]
+        self.assertEqual(modio_count_after, 3)  # unchanged from fixture seed

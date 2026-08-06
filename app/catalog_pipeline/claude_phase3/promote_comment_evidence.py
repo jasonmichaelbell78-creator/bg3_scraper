@@ -93,3 +93,70 @@ def build_content_sha256(payload_json: str) -> str:
 
 def build_raw_locator(platform: str, source_line_number: int) -> str:
     return f"{platform}_comments_merged.jsonl#L{source_line_number}"
+
+
+NEXUS_PLACEHOLDER_CORPUS_UUID = "cc2ea89e-3980-552e-aeb3-4c7e6056a3a1"
+
+
+def insert_nexus_evidence_corpus(conn: sqlite3.Connection, *, record_count: int) -> str:
+    corpus_uuid = str(uuid.uuid5(
+        uuid.NAMESPACE_URL, "bg3:evidence-corpus:nexus:phase3_comment_promotion_2026-08"
+    ))
+    conn.execute(
+        """INSERT INTO evidence_corpora
+           (corpus_uuid, provider, object_scope, capture_label, coverage_state,
+            record_count_raw, record_count_unique, limitation_notes, supersedes_corpus_uuid)
+           VALUES (?, 'nexus', 'comments', 'nexus_comments_merged_phase3_promotion_2026-08',
+                   'partial', ?, ?, ?, ?)""",
+        (
+            corpus_uuid, record_count, record_count,
+            "Sourced from Phase 2B comment-evidence-index. Two mods have permanent "
+            "partial capture: 279 (4,511 comments, page-123 Cloudflare wall) and "
+            "22659 (74 comments) -- accepted gaps, see CLAUDE.md.",
+            NEXUS_PLACEHOLDER_CORPUS_UUID,
+        ),
+    )
+    return corpus_uuid
+
+
+def insert_nexus_evidence_source_records(
+    candidate_conn: sqlite3.Connection,
+    phase2b_conn: sqlite3.Connection,
+    corpus_uuid: str,
+    *,
+    platform_mod_ids: list[str] | None = None,
+) -> dict[str, str]:
+    phase2b_conn.row_factory = sqlite3.Row
+    query = "SELECT * FROM comments WHERE platform = 'nexus'"
+    params: tuple = ()
+    if platform_mod_ids is not None:
+        placeholders = ",".join("?" for _ in platform_mod_ids)
+        query += f" AND platform_mod_id IN ({placeholders})"
+        params = tuple(platform_mod_ids)
+
+    uuid_by_comment_id: dict[str, str] = {}
+    rows_to_insert = []
+    for row in phase2b_conn.execute(query, params):
+        source_record_uuid = build_source_record_uuid(
+            "nexus", row["platform_mod_id"], row["source_comment_id"]
+        )
+        payload_json = build_comment_payload_json(row)
+        content_sha256 = build_content_sha256(payload_json)
+        raw_locator = build_raw_locator("nexus", row["source_line_number"])
+        rows_to_insert.append((
+            source_record_uuid, corpus_uuid, "comment", row["source_comment_id"],
+            row["b26_listing_uuid"], row["parent_source_comment_id"],
+            row["captured_timestamp"], row["author_display_name"], None,
+            content_sha256, payload_json, raw_locator,
+        ))
+        uuid_by_comment_id[row["source_comment_id"]] = source_record_uuid
+
+    candidate_conn.executemany(
+        """INSERT INTO evidence_source_records
+           (source_record_uuid, corpus_uuid, provider_object_type, provider_native_id,
+            source_listing_uuid, parent_provider_native_id, observed_at, displayed_author,
+            version_text, content_sha256, payload_json, raw_locator)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        rows_to_insert,
+    )
+    return uuid_by_comment_id
