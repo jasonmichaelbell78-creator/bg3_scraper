@@ -38,3 +38,6 @@ test-results/
 # Personal Claude Code tooling (not part of this project)
 .claude/
 tools/
+
+# Subagent-driven-development scratch workspaces (ledgers, briefs, reports)
+.superpowers/
