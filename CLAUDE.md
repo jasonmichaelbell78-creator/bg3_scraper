@@ -843,6 +843,18 @@ feeds into), but noted here so it isn't lost between sessions.
   roadmap Gate 3/4 notes -- Nexus comments are explicitly named as a distinct,
   not-yet-ingested corpus in `00_SHARED_PROJECT_ROADMAP.md`), not just new web
   sources.
+- **Attempted 2026-08-06, blocked**: tried to start with the "BG3 Modding
+  Community" Discord server (the flagged most-promising unreached source) via
+  `claude-in-chrome` from this Codespace session. The Chrome extension
+  connection failed outright (`Browser extension is not connected`), and the
+  user confirmed this is the same Mimecast-blocked environment the whole
+  Codespace workaround exists for in the first place -- i.e. this specific
+  device/session can't install or use the extension at all, not just a
+  one-off connection hiccup. **Not a dead end, just needs the right machine**:
+  same as the 279/22659 rescue precedent, this needs a genuinely different,
+  unblocked device with a real Chrome install to run `claude-in-chrome` from.
+  Nothing else about the plan above has changed -- still start with "BG3
+  Modding Community" Discord once such a machine is available.
 
 ## Incident: `nexus_comments_merged.jsonl` regressed to a stale version, then recovered (2026-07-31)
 - A 2026-07-30 parity audit (`DB_PROJECT_GAP_REPORT_2026-07-30.md`, run from
