@@ -376,3 +376,50 @@ class TestRetireModComments(unittest.TestCase):
         ).fetchone()
         self.assertEqual(row[0], "nexus")
         self.assertIn(row[1], {"555001", "555002", "555003"})
+
+
+from app.catalog_pipeline.claude_phase3.promote_comment_evidence import run_and_verify_test_batch
+
+
+class TestTestBatchOrchestration(unittest.TestCase):
+    def setUp(self):
+        self.candidate = sqlite3.connect(":memory:")
+        create_fixture_candidate_db(self.candidate)
+        self.phase2b = sqlite3.connect(":memory:")
+        create_fixture_phase2b_db(self.phase2b)
+
+    def test_test_batch_inserts_then_rolls_back_leaving_no_trace(self):
+        run_and_verify_test_batch(
+            self.candidate, self.phase2b,
+            nexus_mod_ids=["14077"], modio_mod_ids=["4320786"],
+        )
+        # after rollback: no new nexus corpus, no new evidence rows beyond
+        # the 3 modio fixture-seed rows, mod_comments still a table (not
+        # retired -- that only happens in the real run, Task 8)
+        nexus_corpora = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_corpora WHERE provider='nexus'"
+        ).fetchone()[0]
+        self.assertEqual(nexus_corpora, 0)
+        evidence_count = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records"
+        ).fetchone()[0]
+        self.assertEqual(evidence_count, 3)  # unchanged from fixture seed
+        table_type = self.candidate.execute(
+            "SELECT type FROM sqlite_master WHERE name='mod_comments'"
+        ).fetchone()[0]
+        self.assertEqual(table_type, "table")
+
+    def test_test_batch_raises_on_verification_mismatch(self):
+        # Corrupt the builder so payload doesn't match source, proving the
+        # verification step actually checks content rather than just row counts.
+        import app.catalog_pipeline.claude_phase3.promote_comment_evidence as mod
+        original = mod.build_comment_payload_json
+        mod.build_comment_payload_json = lambda row: '{"body": "WRONG"}'
+        try:
+            with self.assertRaises(AssertionError):
+                run_and_verify_test_batch(
+                    self.candidate, self.phase2b,
+                    nexus_mod_ids=["14077"], modio_mod_ids=["4320786"],
+                )
+        finally:
+            mod.build_comment_payload_json = original

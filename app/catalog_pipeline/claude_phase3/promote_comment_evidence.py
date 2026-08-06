@@ -266,3 +266,60 @@ def retire_mod_comments_table(conn: sqlite3.Connection) -> None:
            JOIN evidence_corpora ec ON ec.corpus_uuid = esr.corpus_uuid
            WHERE esr.provider_object_type = 'comment'"""
     )
+
+
+def run_and_verify_test_batch(
+    candidate_conn: sqlite3.Connection,
+    phase2b_conn: sqlite3.Connection,
+    *,
+    nexus_mod_ids: list[str],
+    modio_mod_ids: list[str],
+) -> None:
+    corpus_uuid = insert_nexus_evidence_corpus(candidate_conn, record_count=0)
+    nexus_uuid_map = insert_nexus_evidence_source_records(
+        candidate_conn, phase2b_conn, corpus_uuid, platform_mod_ids=nexus_mod_ids
+    )
+    modio_uuid_map = lookup_existing_modio_evidence_uuids(candidate_conn)
+    promote_triage_hits(
+        candidate_conn, phase2b_conn, nexus_uuid_map, modio_uuid_map,
+        platform_mod_ids=nexus_mod_ids + modio_mod_ids,
+    )
+
+    try:
+        _verify_batch_against_source(candidate_conn, phase2b_conn, nexus_uuid_map)
+    finally:
+        candidate_conn.rollback()
+
+
+def _verify_batch_against_source(
+    candidate_conn: sqlite3.Connection,
+    phase2b_conn: sqlite3.Connection,
+    nexus_uuid_map: dict[str, str],
+) -> None:
+    phase2b_conn.row_factory = sqlite3.Row
+    for source_comment_id, source_record_uuid in nexus_uuid_map.items():
+        source_row = phase2b_conn.execute(
+            "SELECT * FROM comments WHERE source_comment_id = ? AND platform = 'nexus'",
+            (source_comment_id,),
+        ).fetchone()
+        inserted_row = candidate_conn.execute(
+            "SELECT payload_json, content_sha256, source_listing_uuid, raw_locator "
+            "FROM evidence_source_records WHERE source_record_uuid = ?",
+            (source_record_uuid,),
+        ).fetchone()
+        if inserted_row is None:
+            raise AssertionError(f"no evidence row found for {source_comment_id}")
+        payload_json, content_sha256, source_listing_uuid, raw_locator = inserted_row
+        payload = json.loads(payload_json)
+        if payload["body"] != source_row["body"]:
+            raise AssertionError(
+                f"body mismatch for {source_comment_id}: "
+                f"{payload['body']!r} != {source_row['body']!r}"
+            )
+        if content_sha256 != build_content_sha256(payload_json):
+            raise AssertionError(f"content_sha256 mismatch for {source_comment_id}")
+        if source_listing_uuid != source_row["b26_listing_uuid"]:
+            raise AssertionError(f"source_listing_uuid mismatch for {source_comment_id}")
+        expected_locator = build_raw_locator("nexus", source_row["source_line_number"])
+        if raw_locator != expected_locator:
+            raise AssertionError(f"raw_locator mismatch for {source_comment_id}")
