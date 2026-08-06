@@ -363,7 +363,11 @@ def run_migration(
     candidate_conn = sqlite3.connect(candidate_db_path)
     try:
         candidate_conn.execute("PRAGMA foreign_keys = ON")
-        phase2b_conn = sqlite3.connect(phase2b_db_path)
+        # Opened read-only: this is an 818MB hash-gated source DB that this
+        # migration only ever reads from -- no write access is needed or
+        # wanted, and mode=ro avoids ever accidentally creating a WAL/journal
+        # sidecar next to a file whose hash is pinned by the caller.
+        phase2b_conn = sqlite3.connect(f"file:{phase2b_db_path}?mode=ro", uri=True)
         try:
             row_count_before = candidate_conn.execute(
                 "SELECT COUNT(*) FROM evidence_source_records"
@@ -422,7 +426,13 @@ def run_migration(
     # Post-commit: re-open read-only and validate. Wrapped in its own
     # try/finally (also a deviation -- see report) so a failure inside
     # PRAGMA integrity_check/foreign_key_check can't leak this connection.
-    readonly = sqlite3.connect(f"file:{candidate_db_path}?mode=ro&immutable=1", uri=True)
+    # Built from Path.as_uri() rather than hand-interpolated into an f-string
+    # so a path containing '?'/'#'/'%' can't be mis-parsed as query/fragment
+    # syntax. immutable=1 is deliberately NOT set here -- it's only safe by
+    # coincidence today (the candidate DB happens to be journal_mode=delete,
+    # not WAL), and would risk validating stale bytes against a cached mmap
+    # if that ever changes.
+    readonly = sqlite3.connect(candidate_db_path.as_uri() + "?mode=ro", uri=True)
     try:
         integrity = readonly.execute("PRAGMA integrity_check").fetchone()[0]
         fk_violations = readonly.execute("PRAGMA foreign_key_check").fetchall()
@@ -439,6 +449,7 @@ def run_migration(
         "backup_path": str(backup_path),
         "row_count_before": row_count_before,
         "row_count_after": row_count_after,
+        "candidate_sha256_after": sha256_file(candidate_db_path),
     }
     receipt_path.write_text(json.dumps(summary, indent=2, sort_keys=True) + "\n", encoding="utf-8")
     return summary

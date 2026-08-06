@@ -478,8 +478,6 @@ class TestTestBatchOrchestration(unittest.TestCase):
         self.assertEqual(evidence_count, baseline_source_records)
 
 
-import shutil
-
 from app.catalog_pipeline.claude_phase3.promote_comment_evidence import run_migration
 
 
@@ -588,7 +586,9 @@ class TestFullMigration(unittest.TestCase):
         )
         # re-running against the now-migrated DB with the SAME migration_name
         # must fail the hash-gate (the candidate DB's hash has changed) --
-        # proves the migration doesn't silently double-insert
+        # this alone only proves the *gate* fires on a stale hash, not that
+        # the migration itself refuses to double-insert when given a correct,
+        # up-to-date hash. See the second assertion block below for that.
         with self.assertRaises(ValueError):
             run_migration(
                 self.candidate_path, self.phase2b_path,
@@ -597,3 +597,44 @@ class TestFullMigration(unittest.TestCase):
                 migration_name="test_migration_3",
                 receipt_path=self.receipt_path,
             )
+
+        # Now prove the actual double-insert guarantee: pass the DB's real,
+        # CURRENT hash (so the hash-gate itself passes) with a fresh
+        # migration_name, and confirm a second real run still can't succeed.
+        # It can't get past insert_nexus_evidence_corpus's first INSERT --
+        # the corpus_uuid is a deterministic uuid5 of a fixed seed string, so
+        # a second run always tries to insert the exact same PK and collides.
+        row_count_before_retry = sqlite3.connect(self.candidate_path).execute(
+            "SELECT COUNT(*) FROM evidence_source_records"
+        ).fetchone()[0]
+        claim_count_before_retry = sqlite3.connect(self.candidate_path).execute(
+            "SELECT COUNT(*) FROM evidence_claims"
+        ).fetchone()[0]
+
+        current_candidate_sha = sha256_file(self.candidate_path)
+        with self.assertRaises(sqlite3.IntegrityError):
+            run_migration(
+                self.candidate_path, self.phase2b_path,
+                expected_candidate_sha256=current_candidate_sha,  # fresh, passes the gate
+                expected_phase2b_sha256=self.phase2b_sha,
+                migration_name="test_migration_3_second_real_attempt",
+                receipt_path=self.receipt_path,
+            )
+
+        con = sqlite3.connect(self.candidate_path)
+        row_count_after_retry = con.execute(
+            "SELECT COUNT(*) FROM evidence_source_records"
+        ).fetchone()[0]
+        claim_count_after_retry = con.execute(
+            "SELECT COUNT(*) FROM evidence_claims"
+        ).fetchone()[0]
+        self.assertEqual(
+            row_count_after_retry, row_count_before_retry,
+            "evidence_source_records row count changed -- second run partially "
+            "double-inserted instead of failing cleanly",
+        )
+        self.assertEqual(
+            claim_count_after_retry, claim_count_before_retry,
+            "evidence_claims row count changed -- second run partially "
+            "double-inserted instead of failing cleanly",
+        )
