@@ -160,3 +160,90 @@ def insert_nexus_evidence_source_records(
         rows_to_insert,
     )
     return uuid_by_comment_id
+
+
+MODIO_CORPUS_UUIDS = (
+    "f12290b9-eb19-5c03-86fc-3e2064e4104f",
+    "e88d8457-18e1-5f54-8cf1-d0b93a2e6c01",
+)
+
+
+def lookup_existing_modio_evidence_uuids(candidate_conn: sqlite3.Connection) -> dict[str, str]:
+    placeholders = ",".join("?" for _ in MODIO_CORPUS_UUIDS)
+    rows = candidate_conn.execute(
+        f"SELECT provider_native_id, source_record_uuid FROM evidence_source_records "
+        f"WHERE corpus_uuid IN ({placeholders})",
+        MODIO_CORPUS_UUIDS,
+    ).fetchall()
+    return {row[0]: row[1] for row in rows}
+
+
+def promote_triage_hits(
+    candidate_conn: sqlite3.Connection,
+    phase2b_conn: sqlite3.Connection,
+    nexus_uuid_by_comment_id: dict[str, str],
+    modio_uuid_by_comment_id: dict[str, str],
+    *,
+    platform_mod_ids: list[str] | None = None,
+) -> int:
+    phase2b_conn.row_factory = sqlite3.Row
+    query = (
+        "SELECT t.hit_id, t.rule_code, t.pattern_note, t.created_at, "
+        "c.platform, c.platform_mod_id, c.source_comment_id, "
+        "c.author_identity_tier, c.body "
+        "FROM triage_hits t JOIN comments c ON c.comment_row_id = t.comment_row_id"
+    )
+    params: tuple = ()
+    if platform_mod_ids is not None:
+        placeholders = ",".join("?" for _ in platform_mod_ids)
+        query += f" WHERE c.platform_mod_id IN ({placeholders})"
+        params = tuple(platform_mod_ids)
+
+    claim_rows = []
+    link_rows = []
+    skipped = []
+    for row in phase2b_conn.execute(query, params):
+        if row["platform"] == "nexus":
+            source_record_uuid = nexus_uuid_by_comment_id.get(row["source_comment_id"])
+        else:
+            source_record_uuid = modio_uuid_by_comment_id.get(row["source_comment_id"])
+        if source_record_uuid is None:
+            skipped.append((row["platform"], row["source_comment_id"], row["hit_id"]))
+            continue
+
+        claim_uuid = build_claim_uuid(row["hit_id"])
+        claim_type = RULE_TO_CLAIM_TYPE[row["rule_code"]]
+        claim_rows.append((
+            claim_uuid, row["pattern_note"], claim_type, "triage_only", "proposed",
+            row["author_identity_tier"], "single_unvalidated_triage_source", "low",
+            "not stated", "not stated", "not stated", "not stated",
+            "not resolved -- triage hit only, not yet reviewed",
+            f"Phase 3 mechanical promotion of triage rule '{row['rule_code']}'; "
+            f"unvalidated, see B26 Phase 3 migration design for precision/recall caveat.",
+            row["created_at"],
+        ))
+        excerpt = (row["body"] or "")[:500]
+        link_rows.append((claim_uuid, source_record_uuid, None, "context", excerpt, None))
+
+    if skipped:
+        raise RuntimeError(
+            f"{len(skipped)} triage_hits had no matching evidence_source_records row "
+            f"(should be 0): {skipped[:5]}{'...' if len(skipped) > 5 else ''}"
+        )
+
+    candidate_conn.executemany(
+        """INSERT INTO evidence_claims
+           (claim_uuid, claim_text, claim_type, evidence_state, claim_state,
+            source_authority, corroboration_state, confidence, game_patch_scope,
+            manager_scope, tool_and_version_scope, deployment_channel_scope,
+            target_text, notes, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+        claim_rows,
+    )
+    candidate_conn.executemany(
+        """INSERT INTO evidence_claim_links
+           (claim_uuid, source_record_uuid, artifact_uuid, link_role, evidence_excerpt, content_sha256)
+           VALUES (?, ?, ?, ?, ?, ?)""",
+        link_rows,
+    )
+    return len(claim_rows)

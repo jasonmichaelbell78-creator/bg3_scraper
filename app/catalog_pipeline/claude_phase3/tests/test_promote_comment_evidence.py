@@ -248,3 +248,75 @@ class TestNexusEvidenceInsert(unittest.TestCase):
             "('f12290b9-eb19-5c03-86fc-3e2064e4104f','e88d8457-18e1-5f54-8cf1-d0b93a2e6c01')"
         ).fetchone()[0]
         self.assertEqual(modio_count_after, 3)  # unchanged from fixture seed
+
+
+from app.catalog_pipeline.claude_phase3.promote_comment_evidence import (
+    MODIO_CORPUS_UUIDS,
+    lookup_existing_modio_evidence_uuids,
+    promote_triage_hits,
+)
+
+
+class TestTriagePromotion(unittest.TestCase):
+    def setUp(self):
+        self.candidate = sqlite3.connect(":memory:")
+        create_fixture_candidate_db(self.candidate)
+        self.phase2b = sqlite3.connect(":memory:")
+        create_fixture_phase2b_db(self.phase2b)
+        corpus_uuid = insert_nexus_evidence_corpus(self.candidate, record_count=3)
+        self.nexus_uuid_by_comment_id = insert_nexus_evidence_source_records(
+            self.candidate, self.phase2b, corpus_uuid
+        )
+
+    def test_lookup_existing_modio_evidence_finds_fixture_seed_rows(self):
+        modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        self.assertEqual(set(modio_map.keys()), {"9001", "9002", "9003"})
+
+    def test_promote_triage_hits_inserts_one_claim_per_hit(self):
+        modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        count = promote_triage_hits(
+            self.candidate, self.phase2b, self.nexus_uuid_by_comment_id, modio_map
+        )
+        self.assertEqual(count, 3)  # fixture has exactly 3 triage_hits
+        claim_count = self.candidate.execute("SELECT COUNT(*) FROM evidence_claims").fetchone()[0]
+        link_count = self.candidate.execute("SELECT COUNT(*) FROM evidence_claim_links").fetchone()[0]
+        self.assertEqual(claim_count, 3)
+        self.assertEqual(link_count, 3)
+
+    def test_all_promoted_claims_are_triage_only_and_proposed(self):
+        modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        promote_triage_hits(self.candidate, self.phase2b, self.nexus_uuid_by_comment_id, modio_map)
+        states = self.candidate.execute(
+            "SELECT DISTINCT evidence_state, claim_state, confidence, corroboration_state "
+            "FROM evidence_claims"
+        ).fetchall()
+        self.assertEqual(states, [("triage_only", "proposed", "low", "single_unvalidated_triage_source")])
+
+    def test_claim_type_mapping_applied_correctly(self):
+        modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        promote_triage_hits(self.candidate, self.phase2b, self.nexus_uuid_by_comment_id, modio_map)
+        claim_types = {row[0] for row in self.candidate.execute(
+            "SELECT claim_type FROM evidence_claims"
+        )}
+        # fixture has one required_dependency, one incompatibility, one relative_load_order hit
+        self.assertEqual(claim_types, {"dependency_requirement", "incompatibility", "load_order"})
+
+    def test_modio_claim_links_to_existing_evidence_not_new(self):
+        modio_map = lookup_existing_modio_evidence_uuids(self.candidate)
+        promote_triage_hits(self.candidate, self.phase2b, self.nexus_uuid_by_comment_id, modio_map)
+        modio_evidence_count_after = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records WHERE corpus_uuid IN "
+            "('f12290b9-eb19-5c03-86fc-3e2064e4104f','e88d8457-18e1-5f54-8cf1-d0b93a2e6c01')"
+        ).fetchone()[0]
+        self.assertEqual(modio_evidence_count_after, 3)  # unchanged -- no new modio rows
+        # the modio-derived claim's link must point at one of the pre-existing UUIDs
+        modio_claim_link = self.candidate.execute(
+            "SELECT source_record_uuid FROM evidence_claim_links WHERE claim_uuid = ?",
+            (build_claim_uuid(2),),  # hit_id=2 is the modio incompatibility hit
+        ).fetchone()
+        self.assertIn(modio_claim_link[0], modio_map.values())
+
+    def test_promote_triage_hits_raises_if_evidence_missing(self):
+        # empty maps -- every hit's comment has no matching evidence row
+        with self.assertRaises(RuntimeError):
+            promote_triage_hits(self.candidate, self.phase2b, {}, {})
