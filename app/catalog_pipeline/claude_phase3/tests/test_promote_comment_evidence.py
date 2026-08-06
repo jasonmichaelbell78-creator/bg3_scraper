@@ -423,3 +423,56 @@ class TestTestBatchOrchestration(unittest.TestCase):
                 )
         finally:
             mod.build_comment_payload_json = original
+
+    def test_test_batch_raises_assertion_error_on_empty_nexus_match_set(self):
+        # Finding 1: a wrong/typo'd mod id matches zero rows in the source DB,
+        # so nexus_uuid_map ends up empty. _verify_batch_against_source's loop
+        # body never executes in that case -- without an explicit guard the
+        # function returns normally, silently reporting success having
+        # verified zero rows. Must raise instead of passing.
+        with self.assertRaises(AssertionError):
+            run_and_verify_test_batch(
+                self.candidate, self.phase2b,
+                nexus_mod_ids=["does-not-exist"], modio_mod_ids=["does-not-exist"],
+            )
+
+    def test_test_batch_rollback_covers_insert_steps_not_just_verification(self):
+        # Finding 2: the inserts (insert_nexus_evidence_corpus,
+        # insert_nexus_evidence_source_records, promote_triage_hits) used to
+        # run outside the try/finally, so an exception raised during/after
+        # them (e.g. promote_triage_hits' documented RuntimeError-on-
+        # unmatched-evidence contract) would skip candidate_conn.rollback()
+        # entirely, leaving an open transaction with partial data. Force a
+        # failure inside promote_triage_hits (called after real inserts have
+        # already happened) and confirm the connection shows no leaked rows
+        # afterward -- proof rollback covers the whole insert-and-verify
+        # sequence, not just the verification step.
+        baseline_source_records = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records"
+        ).fetchone()[0]
+        self.assertEqual(baseline_source_records, 3)  # modio fixture seed only
+
+        import app.catalog_pipeline.claude_phase3.promote_comment_evidence as mod
+        original = mod.promote_triage_hits
+
+        def boom(*args, **kwargs):
+            raise RuntimeError("simulated promote_triage_hits failure")
+
+        mod.promote_triage_hits = boom
+        try:
+            with self.assertRaises(RuntimeError):
+                run_and_verify_test_batch(
+                    self.candidate, self.phase2b,
+                    nexus_mod_ids=["14077"], modio_mod_ids=["4320786"],
+                )
+        finally:
+            mod.promote_triage_hits = original
+
+        nexus_corpora = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_corpora WHERE provider='nexus'"
+        ).fetchone()[0]
+        self.assertEqual(nexus_corpora, 0)
+        evidence_count = self.candidate.execute(
+            "SELECT COUNT(*) FROM evidence_source_records"
+        ).fetchone()[0]
+        self.assertEqual(evidence_count, baseline_source_records)

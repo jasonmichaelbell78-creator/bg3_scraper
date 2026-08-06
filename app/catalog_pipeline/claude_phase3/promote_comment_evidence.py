@@ -275,18 +275,17 @@ def run_and_verify_test_batch(
     nexus_mod_ids: list[str],
     modio_mod_ids: list[str],
 ) -> None:
-    corpus_uuid = insert_nexus_evidence_corpus(candidate_conn, record_count=0)
-    nexus_uuid_map = insert_nexus_evidence_source_records(
-        candidate_conn, phase2b_conn, corpus_uuid, platform_mod_ids=nexus_mod_ids
-    )
-    modio_uuid_map = lookup_existing_modio_evidence_uuids(candidate_conn)
-    promote_triage_hits(
-        candidate_conn, phase2b_conn, nexus_uuid_map, modio_uuid_map,
-        platform_mod_ids=nexus_mod_ids + modio_mod_ids,
-    )
-
     try:
-        _verify_batch_against_source(candidate_conn, phase2b_conn, nexus_uuid_map)
+        corpus_uuid = insert_nexus_evidence_corpus(candidate_conn, record_count=0)
+        nexus_uuid_map = insert_nexus_evidence_source_records(
+            candidate_conn, phase2b_conn, corpus_uuid, platform_mod_ids=nexus_mod_ids
+        )
+        modio_uuid_map = lookup_existing_modio_evidence_uuids(candidate_conn)
+        promote_triage_hits(
+            candidate_conn, phase2b_conn, nexus_uuid_map, modio_uuid_map,
+            platform_mod_ids=nexus_mod_ids + modio_mod_ids,
+        )
+        _verify_batch_against_source(candidate_conn, phase2b_conn, nexus_uuid_map, nexus_mod_ids)
     finally:
         candidate_conn.rollback()
 
@@ -295,7 +294,13 @@ def _verify_batch_against_source(
     candidate_conn: sqlite3.Connection,
     phase2b_conn: sqlite3.Connection,
     nexus_uuid_map: dict[str, str],
+    nexus_mod_ids: list[str] | None = None,
 ) -> None:
+    if not nexus_uuid_map:
+        raise AssertionError(
+            "verification found zero matching nexus comments -- refusing to report a "
+            f"pass on an empty sample (searched nexus_mod_ids={nexus_mod_ids!r})"
+        )
     phase2b_conn.row_factory = sqlite3.Row
     for source_comment_id, source_record_uuid in nexus_uuid_map.items():
         source_row = phase2b_conn.execute(
