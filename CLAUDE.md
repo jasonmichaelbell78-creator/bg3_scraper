@@ -804,13 +804,14 @@ is still not fully clear — ask the user rather than assuming.
 via manual drag-and-drop by the user. Verified: all six present with
 matching file sizes.
 
-**Not yet decided**: `get-mod-collections`/`get-mod-collection` (collections
-a specific MOD belongs to, the inverse lookup) weren't built — only the
-game-level list. Given the
-existing precedent of `BG3Scraper_Active/Nexus/` already holding raw output
-JSONL alongside the scripts, the Collections output files were placed the
-same way rather than inventing new roadmap structure unilaterally — flag
-this for the user/conference to confirm or redirect.
+**Both open questions here resolved 2026-08-07**: the inverse lookup
+(`get-mod-collections` — collections a specific mod belongs to) needs no
+new script — the full sweep already captured collection→mod membership,
+now loaded into `catalog_collection_memberships` (49,907 rows) with a
+`mapped_listing_uuid` FK, so "which collections is mod X in" is already a
+plain query (see the B26 Phase 4 section below). File placement — whether
+`data/collections/{modio,nexus}/` is the permanent location — **user
+confirmed 2026-08-07: keep it where it is.**
 
 ## Future work: Load Order Guidance doc research (cross-project pointer, 2026-07-24)
 Not part of this repo's own scope (this repo is the scraper; the guidance doc is
