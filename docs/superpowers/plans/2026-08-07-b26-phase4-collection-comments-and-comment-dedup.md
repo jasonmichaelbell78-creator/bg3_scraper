@@ -12,6 +12,7 @@
 
 - Never modify `catalog/B26/*.db` without a `.pre-phaseN-backup` copy first (same rule Phase 3 followed) — `catalog/` is gitignored, so a bad run isn't recoverable from git.
 - Both migrations must be idempotent: a second run against an already-migrated DB must fail cleanly (`IntegrityError` from a `UNIQUE` constraint), not silently duplicate rows or silently no-op.
+  **Correction 2026-08-07 (final review):** this describes the lower-level `insert_collection_comments()` function's own failure mode, which is what its unit test (`test_insert_collection_comments_idempotent`) actually covers. `run_migration()`'s real end-to-end double-run failure mode is different: it fails earlier and differently, with `sqlite3.OperationalError: table already exists` at the `CREATE TABLE catalog_collection_comments` step, since that DDL runs before any INSERT would ever reach the UNIQUE constraint. Both are legitimate "fails cleanly, doesn't duplicate" outcomes -- just via different exception types at different points -- so this isn't a functional bug, only a description mismatch worth knowing if this plan is ever replayed.
 - Reuse `sha256_file`, `verify_db_hash`, and `backup_database` from `app.catalog_pipeline.claude_phase3.promote_comment_evidence` rather than reimplementing them (DRY — Phase 3 already built and tested these).
 - Source files are read-only inputs, never modified: `data/collections/modio/modio_collections_comments.jsonl` (sha256 `8254971d357a878c9223cb442e08f7141ec88210f08c9e12b177e5478e0de31d`, 968 lines, 811 `_status:"no_comments"` sentinels + 157 real comments) and `data/collections/nexus/nexus_collections_comments.jsonl` (sha256 `0cdb38f54e419b7ed54705ef831771bb668602be68edd7b3b3849f6474179354`, 4999 lines, 34 sentinels + 4965 real comments).
 - Both tasks operate on `catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db` — confirm its current sha256 with `sha256sum` immediately before running either migration for real, and abort on mismatch (per this project's standing "never proceed past an unexplained checksum mismatch" rule, see CLAUDE.md's B26 Phase 3 section).
@@ -785,6 +786,8 @@ git commit -m "B26 Phase 4: add catalog_collection_comments migration"
 
 Run: `cd /workspaces/bg3_scraper && sha256sum catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db`
 Expected: `cb37e0392b7bdb0b06f8095c44b8352363610999498ff4803e07411df3187775` (the value recorded in `Google Drive/PROJECT_RECORD.md` and the 2026-07-30 gap report). If it doesn't match, stop — something changed the DB since this plan was written and the discrepancy needs explaining before proceeding, not overriding.
+
+**Corrected 2026-08-07:** the hash above is stale -- it's the pre-Phase-3 baseline, and Phase 3 already changed the file before this plan was written. The real migration run used the corrected hash `cdefc2946953c396908e9d358d39e7f93eb31d86a71bed0a73b79a8a2cf8bf05` instead (cross-checked against `catalog/B26/phase3_migration_receipt.json`). Use that value, not the one above, if replaying this step -- expect a mismatch against the `cb37e039...` value and don't treat it as a real discrepancy.
 
 - [ ] **Step 2: Run the mod_comments view fix**
 

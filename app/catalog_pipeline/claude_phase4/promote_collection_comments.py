@@ -90,9 +90,10 @@ def insert_collection_comments(
     filepath: Path,
     corpus_sha256: str,
     collection_lookup: dict,
-) -> int:
+) -> tuple[int, int]:
     parser = PARSERS[platform]
     inserted = 0
+    skipped_unmapped = 0
     with open(filepath, "r", encoding="utf-8") as fh:
         for line_number, line in enumerate(fh, start=1):
             line = line.strip()
@@ -103,6 +104,7 @@ def insert_collection_comments(
                 continue
             collection_uuid = collection_lookup.get((platform, parsed["collection_native_id"]))
             if collection_uuid is None:
+                skipped_unmapped += 1
                 continue
             comment_uuid = build_collection_comment_uuid(
                 platform, parsed["collection_native_id"], parsed["source_comment_id"]
@@ -129,45 +131,61 @@ def insert_collection_comments(
                 ),
             )
             inserted += 1
-    return inserted
+    return inserted, skipped_unmapped
 
 
 def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_path: Path) -> dict:
     verify_db_hash(db_path, expected_sha256)
-    backup_path = backup_database(db_path)
+    backup_path = backup_database(db_path, suffix=".pre-phase4-backup")
     modio_sha256 = sha256_file(modio_path)
     nexus_sha256 = sha256_file(nexus_path)
 
     conn = sqlite3.connect(str(db_path))
     try:
-        conn.execute(
-            """
-            CREATE TABLE catalog_collection_comments (
-                comment_uuid TEXT PRIMARY KEY,
-                collection_uuid TEXT NOT NULL REFERENCES catalog_collections(collection_uuid),
-                platform TEXT NOT NULL CHECK(platform IN ('modio', 'nexus')),
-                source_comment_id TEXT NOT NULL,
-                parent_source_comment_id TEXT,
-                author_display_name TEXT,
-                author_user_id TEXT,
-                observed_at TEXT,
-                body TEXT NOT NULL,
-                payload_json TEXT NOT NULL,
-                source_corpus_sha256 TEXT NOT NULL,
-                source_line_number INTEGER NOT NULL,
-                UNIQUE(platform, source_comment_id)
+        # Python's sqlite3 module only auto-opens an implicit transaction
+        # before DML, not before DDL (CREATE TABLE/INDEX autocommit
+        # individually) -- SQLite itself fully supports transactional DDL,
+        # so an explicit BEGIN/commit-or-rollback here is what actually
+        # makes the table creation + both platforms' inserts atomic (a
+        # mid-run failure would otherwise leave the table created but only
+        # partially populated).
+        conn.execute("BEGIN")
+        try:
+            conn.execute(
+                """
+                CREATE TABLE catalog_collection_comments (
+                    comment_uuid TEXT PRIMARY KEY,
+                    collection_uuid TEXT NOT NULL REFERENCES catalog_collections(collection_uuid),
+                    platform TEXT NOT NULL CHECK(platform IN ('modio', 'nexus')),
+                    source_comment_id TEXT NOT NULL,
+                    parent_source_comment_id TEXT,
+                    author_display_name TEXT,
+                    author_user_id TEXT,
+                    observed_at TEXT,
+                    body TEXT NOT NULL,
+                    payload_json TEXT NOT NULL,
+                    source_corpus_sha256 TEXT NOT NULL,
+                    source_line_number INTEGER NOT NULL,
+                    UNIQUE(platform, source_comment_id)
+                )
+                """
             )
-            """
-        )
-        conn.execute(
-            """CREATE INDEX idx_catalog_collection_comments_collection
-               ON catalog_collection_comments(collection_uuid, platform)"""
-        )
+            conn.execute(
+                """CREATE INDEX idx_catalog_collection_comments_collection
+                   ON catalog_collection_comments(collection_uuid, platform)"""
+            )
 
-        lookup = load_collection_lookup(conn)
-        modio_inserted = insert_collection_comments(conn, "modio", modio_path, modio_sha256, lookup)
-        nexus_inserted = insert_collection_comments(conn, "nexus", nexus_path, nexus_sha256, lookup)
-        conn.commit()
+            lookup = load_collection_lookup(conn)
+            modio_inserted, modio_skipped_unmapped = insert_collection_comments(
+                conn, "modio", modio_path, modio_sha256, lookup
+            )
+            nexus_inserted, nexus_skipped_unmapped = insert_collection_comments(
+                conn, "nexus", nexus_path, nexus_sha256, lookup
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     finally:
         conn.close()
 
@@ -181,6 +199,8 @@ def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_p
         "nexus_source_sha256": nexus_sha256,
         "modio_rows_inserted": modio_inserted,
         "nexus_rows_inserted": nexus_inserted,
+        "modio_rows_skipped_unmapped": modio_skipped_unmapped,
+        "nexus_rows_skipped_unmapped": nexus_skipped_unmapped,
         "post_migration_sha256": post_sha256,
     }
 

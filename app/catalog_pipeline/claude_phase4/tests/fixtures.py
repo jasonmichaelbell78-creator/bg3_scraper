@@ -36,6 +36,11 @@ def create_fixture_db(conn: sqlite3.Connection) -> None:
           UNIQUE (corpus_uuid, provider_object_type, provider_native_id)
         );
 
+        -- Intentionally the OLD (pre-fix, buggy) view definition -- no
+        -- supersession filter. test_superseded_corpus_rows_excluded_after_fix
+        -- needs to reproduce the bug first, then calls rebuild_mod_comments_view()
+        -- to fix it in-place. Do not "helpfully" change this to the corrected
+        -- SQL; that test's own `assert before == 2` line would then fail.
         CREATE VIEW mod_comments AS
            SELECT
                esr.source_record_uuid AS comment_uuid,

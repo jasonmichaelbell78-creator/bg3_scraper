@@ -56,22 +56,33 @@ def rebuild_mod_comments_view(conn: sqlite3.Connection) -> None:
 
 def run_fix(db_path: Path, expected_sha256: str) -> dict:
     verify_db_hash(db_path, expected_sha256)
-    backup_path = backup_database(db_path)
+    backup_path = backup_database(db_path, suffix=".pre-phase4-backup")
 
     conn = sqlite3.connect(str(db_path))
     try:
-        before = dict(
-            conn.execute(
-                "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
-            ).fetchall()
-        )
-        rebuild_mod_comments_view(conn)
-        after = dict(
-            conn.execute(
-                "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
-            ).fetchall()
-        )
-        conn.commit()
+        # Python's sqlite3 module only auto-opens an implicit transaction
+        # before DML, not before DDL (CREATE/DROP autocommit individually) --
+        # SQLite itself fully supports transactional DDL, so an explicit
+        # BEGIN/commit-or-rollback here is what actually makes the DROP VIEW
+        # + CREATE VIEW pair atomic (a mid-run failure would otherwise leave
+        # the DB with mod_comments dropped and not yet recreated).
+        conn.execute("BEGIN")
+        try:
+            before = dict(
+                conn.execute(
+                    "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
+                ).fetchall()
+            )
+            rebuild_mod_comments_view(conn)
+            after = dict(
+                conn.execute(
+                    "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
+                ).fetchall()
+            )
+            conn.commit()
+        except Exception:
+            conn.rollback()
+            raise
     finally:
         conn.close()
 

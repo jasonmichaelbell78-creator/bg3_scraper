@@ -47,7 +47,7 @@ def test_non_superseded_corpus_rows_untouched(conn):
     assert after == 1
 
 
-def test_chained_supersession_only_excludes_directly_superseded(conn):
+def test_chained_supersession_excludes_every_superseded_corpus(conn):
     # corpus A superseded by B, B superseded by C -- A and B both excluded, C kept
     insert_corpus(conn, "a", "modio", "v1")
     insert_corpus(conn, "b", "modio", "v2", supersedes="a")

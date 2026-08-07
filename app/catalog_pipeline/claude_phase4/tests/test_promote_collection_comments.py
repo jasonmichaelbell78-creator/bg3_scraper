@@ -112,9 +112,10 @@ def test_insert_collection_comments_modio(conn, tmp_path):
         + "\n"
     )
     lookup = load_collection_lookup(conn)
-    inserted = insert_collection_comments(conn, "modio", f, "deadbeef", lookup)
+    inserted, skipped_unmapped = insert_collection_comments(conn, "modio", f, "deadbeef", lookup)
     conn.commit()
     assert inserted == 1
+    assert skipped_unmapped == 0
     row = conn.execute(
         "SELECT collection_uuid, source_comment_id, body FROM catalog_collection_comments"
     ).fetchone()
@@ -131,8 +132,9 @@ def test_insert_collection_comments_skips_unmapped_collection(conn, tmp_path):
         + "\n"
     )
     lookup = load_collection_lookup(conn)
-    inserted = insert_collection_comments(conn, "modio", f, "deadbeef", lookup)
+    inserted, skipped_unmapped = insert_collection_comments(conn, "modio", f, "deadbeef", lookup)
     assert inserted == 0
+    assert skipped_unmapped == 1
     assert conn.execute("SELECT COUNT(*) FROM catalog_collection_comments").fetchone()[0] == 0
 
 
