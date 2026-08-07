@@ -909,13 +909,40 @@ session:
 - **v13 draft written**: `Google Drive/BG3_Load_Order_Guidance_v13.md` in
   this repo's local Drive mirror (matches v12's structure and sourcing
   rigor exactly -- full document reconstructed from the real v12 fetched
-  via the Google Drive MCP tool, not written from scratch). **Not yet
-  uploaded to the real Drive** -- v12's two existing copies both live in
-  what look like frozen snapshot folders (`gate1` baseline package,
-  `01_FROZEN_LOADOUT_DESIGN`), not an obviously-live working folder, so
-  placement needs the user's call rather than a guess.
-- **Still open after this round**: the "BG3 Modding Community" Discord ban
-  (appeal not attempted), the locked "Mods that work in Patch 8 WIP"
+  via the Google Drive MCP tool, not written from scratch). Uploaded to
+  the real Drive's `BG3/` root shortly after, but left loose there
+  (alongside `PROJECT_RECORD.md`/`00_READ_ME.md`), not in any dedicated
+  folder.
+- **Placement resolved 2026-08-07**: traced both v12 copies' full parent
+  chains -- `gate1`/`BG3_Gate1_Package_2026-07-22`/`01_GATE1_BASELINE` and
+  `01_FROZEN_LOADOUT_DESIGN` -- and both terminate under
+  `BG3/ARCHIVE/LEGACY_DRIVE_STRUCTURE_2026-07-30/`, confirmed genuinely
+  archived, not just stale-looking. Same for every other roadmap/work-
+  delineation doc found in Drive (`00_SHARED_PROJECT_ROADMAP.md`,
+  `01_WORK_DELINEATION__SUPERSEDED.md`, `BG3_CATALOG_COMPLETION_PLAN...`)
+  -- the whole old Gate/C1-C7 conference-point system is archived, matching
+  this file's own 2026-08-04 retirement decision, not merely superseded in
+  spirit. No existing "live" folder was a fit for this doc: the `BG3/`
+  root's own `00_READ_ME.md` explicitly scopes itself to the reference
+  *catalog* ("not a load-order system"), and Load Order Guidance is a
+  distinct workstream (Claude's research contribution toward the shared
+  roadmap's eventual "Gate 6 -- Personal loadout system", per
+  `BG3_CATALOG_COMPLETION_PLAN_AND_WORK_DELINEATION_2026-07-26.md" --
+  related to the same overall project, but not the catalog itself).
+  **Created `BG3/LOAD_ORDER_GUIDANCE/`**, a new sibling folder to
+  `CATALOG`/`SOURCES`/`SCRAPER`/`ARCHIVE`, with `BG3_Load_Order_Guidance_v13.md`
+  and a `00_README.md` explaining the folder's scope and pointing back to
+  the archived v12 copies for history. This is now the real live home for
+  v14+ too. Two harmless housekeeping leftovers need a manual Drive trash
+  (no delete/trash tool available via MCP to do it directly): a
+  mis-formatted Google-Doc-type `00_README.md` created and immediately
+  superseded during setup, and the now-redundant loose `v13.md` still
+  sitting at the `BG3/` root.
+- **User's call, 2026-08-07: the three remaining "still open" items below
+  are deliberately not being pursued** -- deprioritized as not worth the
+  effort relative to what they'd add.
+- **Still open, not being pursued**: the "BG3 Modding Community" Discord
+  ban (appeal not attempted), the locked "Mods that work in Patch 8 WIP"
   Larian Discord thread (not specifically re-located), Nexus's Collections
   feature (out of scope for this round, not attempted), and the private
   Facebook modding group (found, not requested).
