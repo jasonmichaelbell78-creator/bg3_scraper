@@ -843,18 +843,81 @@ feeds into), but noted here so it isn't lost between sessions.
   roadmap Gate 3/4 notes -- Nexus comments are explicitly named as a distinct,
   not-yet-ingested corpus in `00_SHARED_PROJECT_ROADMAP.md`), not just new web
   sources.
-- **Attempted 2026-08-06, blocked**: tried to start with the "BG3 Modding
-  Community" Discord server (the flagged most-promising unreached source) via
-  `claude-in-chrome` from this Codespace session. The Chrome extension
-  connection failed outright (`Browser extension is not connected`), and the
-  user confirmed this is the same Mimecast-blocked environment the whole
-  Codespace workaround exists for in the first place -- i.e. this specific
-  device/session can't install or use the extension at all, not just a
-  one-off connection hiccup. **Not a dead end, just needs the right machine**:
-  same as the 279/22659 rescue precedent, this needs a genuinely different,
-  unblocked device with a real Chrome install to run `claude-in-chrome` from.
-  Nothing else about the plan above has changed -- still start with "BG3
-  Modding Community" Discord once such a machine is available.
+- **Attempted 2026-08-06 (morning), blocked**: tried to start with the "BG3
+  Modding Community" Discord server (the flagged most-promising unreached
+  source) via `claude-in-chrome` from this Codespace session. The Chrome
+  extension connection failed outright (`Browser extension is not
+  connected`), and the user confirmed this is the same Mimecast-blocked
+  environment the whole Codespace workaround exists for in the first place.
+  Resolved same day by simply switching to the home machine -- see below.
+
+## Load Order Guidance doc: full research round + v13 draft (2026-08-06, home machine)
+Picking up directly from the blocked attempt above. `claude-in-chrome` connects
+fine from home (no Mimecast block, confirming that was always a work-laptop-only
+constraint). Closed almost the entire "still open" list from v12 §9.4 in one
+session:
+
+- **Reddit: fully reachable and mined**, contrary to v12's note that this
+  sandbox's network egress substituted Steam results regardless of query
+  phrasing -- that problem didn't reproduce from home at all. Searched
+  sitewide (not just r/BG3mods) using dozens of terms including the project's
+  own Tier 1/2 mod-name CSV (Community Library, Compatibility Framework, MCM,
+  5e Spells, UnlockLevelCurve, Party Limit Begone, BG3SX, etc.) plus
+  r/BaldursGate3, r/BG3Builds, r/TavsAndDurges, r/bg3fashion (the latter three
+  confirmed genuinely thin on load-order content, not just unchecked).
+  Surfaced two previously-unknown community tooling projects -- **VOLO**
+  (Verified Order & Load Optimisation, a year-old LOOT-style masterlist
+  project, not yet public) and **BG3 Load Order Optimizer** (Nemix3D,
+  already released, has its own Discord + Patreon tier) -- plus a
+  generalized version of the KAVT scripted-mods-bucket rule stated directly
+  by LN's-divider-maintainer lonely_nipple, and a fourth independent
+  confirmation that Mod Fixer (mod 141) is obsolete since Patch 7.
+- **Larian's official forums, individual-thread level: now reachable.** v12
+  could only render the thread index (individual URLs redirected to a
+  generic Help page). This round, a plain `WebSearch` for
+  `site:forums.larian.com` returned working direct thread links --
+  surfaced the exact `modsettings.lsx` XML structure (`ModOrder->Children`
+  vs `Mods->Children`, confirmed via an authoritative modder's pinned
+  troubleshooting guide), a second broken load-order tool ("Mod Manager
+  Plus," distinct from "Mod Manager Fixes and Tweaks" already known),
+  and confirmation the native in-game manager defaults to strict
+  alphabetical sort with zero reorder control as of Patch 8.
+- **Larian's official Discord: mined further.** The `#modding-guidelines`
+  FAQ channel gives an official, citable statement of the core override
+  rule ("if two separate mods edit the same existing ID-based entry, the
+  load order will win out"), and `#bg3-modded-troubleshooting`'s pinned
+  messages surfaced a third named divider mod (Nexus 15851, distinct from
+  Astra's/Sai's/LN's) officially endorsed by a moderator.
+- **Discord ban discovered and resolved as a diagnosis** (not appealed):
+  the persistent "Unable to accept invite" 403 on the "BG3 Modding
+  Community" join screen, first hit this same day, turned out to be a
+  **permanent ban** issued 2026-07-22 by that server's own Sapphire
+  moderation bot for "Account too new" (an automated anti-raid heuristic)
+  -- found by checking the bot's own DM history, not diagnosable from the
+  join screen alone. Appeal link known (`appeal.gg/bg3mods`), not used.
+  The *other*, separate "BG3 Modding" server (5,270 members) joined
+  cleanly and was checked directly -- confirmed to be a mod-**authoring**
+  community (Toolkit/Osiris scripting, not end-user load-order guidance),
+  a real checked negative result, not a gap.
+- **Facebook: reached for the first time.** Two public groups checked --
+  "Baldur's Gate 3 with mods" (2.1K members, genuinely modding-focused,
+  active troubleshooting culture) and the general "Baldur's Gate 3 / DOS2"
+  (173K members, fan content, not modding-focused despite occasional
+  compatibility notes). A third, private group ("Baldur's Gate 3 -
+  Modding Community," 637 members) was found but not joined.
+- **v13 draft written**: `Google Drive/BG3_Load_Order_Guidance_v13.md` in
+  this repo's local Drive mirror (matches v12's structure and sourcing
+  rigor exactly -- full document reconstructed from the real v12 fetched
+  via the Google Drive MCP tool, not written from scratch). **Not yet
+  uploaded to the real Drive** -- v12's two existing copies both live in
+  what look like frozen snapshot folders (`gate1` baseline package,
+  `01_FROZEN_LOADOUT_DESIGN`), not an obviously-live working folder, so
+  placement needs the user's call rather than a guess.
+- **Still open after this round**: the "BG3 Modding Community" Discord ban
+  (appeal not attempted), the locked "Mods that work in Patch 8 WIP"
+  Larian Discord thread (not specifically re-located), Nexus's Collections
+  feature (out of scope for this round, not attempted), and the private
+  Facebook modding group (found, not requested).
 
 ## Incident: `nexus_comments_merged.jsonl` regressed to a stale version, then recovered (2026-07-31)
 - A 2026-07-30 parity audit (`DB_PROJECT_GAP_REPORT_2026-07-30.md`, run from
