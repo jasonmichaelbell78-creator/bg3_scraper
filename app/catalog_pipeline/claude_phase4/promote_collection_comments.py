@@ -136,7 +136,7 @@ def insert_collection_comments(
 
 def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_path: Path) -> dict:
     verify_db_hash(db_path, expected_sha256)
-    backup_path = backup_database(db_path, suffix=".pre-phase4-backup")
+    backup_path = backup_database(db_path, suffix=".pre-phase4-collection-comments-backup")
     modio_sha256 = sha256_file(modio_path)
     nexus_sha256 = sha256_file(nexus_path)
 

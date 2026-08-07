@@ -56,7 +56,7 @@ def rebuild_mod_comments_view(conn: sqlite3.Connection) -> None:
 
 def run_fix(db_path: Path, expected_sha256: str) -> dict:
     verify_db_hash(db_path, expected_sha256)
-    backup_path = backup_database(db_path, suffix=".pre-phase4-backup")
+    backup_path = backup_database(db_path, suffix=".pre-phase4-view-fix-backup")
 
     conn = sqlite3.connect(str(db_path))
     try:
