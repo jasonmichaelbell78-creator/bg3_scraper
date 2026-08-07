@@ -1007,7 +1007,7 @@ session:
   `worktree-b26-phase3-comment-evidence` worktree/branch (local + remote,
   confirmed superseded — missing Tasks 6-8 that landed on `main`).
 
-## B26 Phase 4 candidates: two DB gaps found during a completeness audit (2026-08-07)
+## B26 Phase 4: comment dedup fix + collection comments migration — COMPLETE (2026-08-07)
 Prompted by a user question about whether the Nexus/mod.io Collections
 inverse lookup (mod → its collections) needs new scraping and whether "all
 data" is now in the DB. Answered both by querying
@@ -1066,12 +1066,64 @@ neither finding below was previously documented anywhere (not here, not in
   would happen) wasn't built by this session and hasn't been inspected;
   this still needs the Codex conference the 2026-07-30 report already
   recommended, not a guess.
-- **Plan written**: `docs/superpowers/plans/2026-08-07-b26-phase4-collection-comments-and-comment-dedup.md`
+- **Plan executed 2026-08-07**: `docs/superpowers/plans/2026-08-07-b26-phase4-collection-comments-and-comment-dedup.md`
   covers both gaps as real code tasks (view fix + a new
   `catalog_collection_comments` table/migration), plus a non-code
   follow-up list for the platform_listings question and the still-open
   Nexus-Collections-file-placement decision from the 2026-07-24 Collections
-  section above.
+  section above. Built via subagent-driven-development (Tasks 1-2, fresh
+  implementer + reviewer per task, both approved with only minor/
+  plan-inherited findings — logged in `.superpowers/sdd/2026-08-07-b26-
+  phase4-collection-comments-and-comment-dedup/progress.md`, not blocking).
+- **Real migration run (Task 3) executed and independently verified,
+  2026-08-07.** One correction made in-flight: the plan's "last known-good"
+  pre-migration hash (`cb37e039...`) was actually the *pre-Phase-3*
+  baseline from the 2026-07-30 gap report — stale, since Phase 3's own
+  2026-08-06 run already changed the file. Caught by the plan's own
+  "never override an unexplained mismatch" gate; resolved by cross-checking
+  against `catalog/B26/phase3_migration_receipt.json`'s own recorded
+  `candidate_sha256_after` (`cdefc294...`), which matched the live file
+  exactly — confirming the file was in its correct, expected post-Phase-3
+  state, just not the hash this plan had recorded. Proceeded with the
+  confirmed-correct hash.
+  - **View fix**: `mod_comments` modio rows 132,276 → 76,043 (exact match to
+    prediction), nexus unchanged at 451,885.
+  - **Collection comments migration**: 157 mod.io + 4,965 Nexus rows
+    inserted into the new `catalog_collection_comments` table (exact match
+    to prediction).
+  - **Independently verified** (not just the scripts' own receipts): all
+    four counts re-queried directly and matched; zero dangling
+    `collection_uuid` references in the new table (direct LEFT JOIN check);
+    `PRAGMA integrity_check` → `ok`; `PRAGMA foreign_key_check` → zero rows;
+    a 3-row spot-check of `catalog_collection_comments` showed real,
+    correctly-linked comment content.
+  - **Incident found during the run, not a data-loss event but worth
+    recording**: `promote_comment_evidence.py`'s `backup_database()` (reused
+    by both Phase 4 scripts per the plan's DRY constraint) hardcodes a
+    `.pre-phase3-backup` suffix — flagged as a Minor, non-blocking risk in
+    Task 1's review, and it materialized immediately in practice. Running
+    the view-fix step overwrote whatever backup previously lived at that
+    path (there wasn't a real Phase 3 one still there to lose — Phase 3's
+    original backup had already served its purpose and Drive independently
+    retains the true pre-Phase-3 baseline at `cb37e039...`, confirmed in
+    `Google Drive/PROJECT_RECORD.md`) with a fresh copy of the
+    post-Phase-3/pre-Phase-4 state. Before the collection-comments step
+    could overwrite that in turn, it was manually copied aside to
+    `catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db.pre-phase4-view-fix-backup`
+    (hash `cdefc294...`) so it wasn't lost. **Follow-up worth doing if
+    `promote_comment_evidence.py` is ever touched again**: rename the
+    hardcoded suffix to something migration-specific, or add an
+    existence/overwrite guard — this collision will recur on every future
+    phase that reuses `backup_database()` as-is.
+  - Backup chain as of this run's completion: `.pre-phase3-backup` now
+    holds the pre-collection-comments/post-view-fix state (hash
+    `e31f9cf5...`); `.pre-phase4-view-fix-backup` holds the
+    post-Phase-3/pre-Phase-4 state (hash `cdefc294...`); Drive holds the
+    true pre-Phase-3 original (`cb37e039...`). Final DB hash after both
+    Phase 4 migrations: `9beca985...`.
+  - Receipts: `catalog/B26/phase4_view_fix_receipt.json`,
+    `catalog/B26/phase4_collection_comments_receipt.json` (both
+    gitignored alongside `catalog/`, same as Phase 3's own receipt).
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
@@ -1129,19 +1181,21 @@ neither finding below was previously documented anywhere (not here, not in
     passed full independent verification. Remaining loose end: none for
     Phase 3 itself; next open item project-wide is item 8 (Load Order
     Guidance doc research), not otherwise progressed this session.
-11. B26 Phase 4 (see dedicated section above) -- **planned, not yet
-    executed, 2026-08-07**. Two DB gaps found during a completeness audit:
-    the retired `mod_comments` view double-counts ~56K superseded mod.io
-    comments (a real live bug), and Collections' own comment threads (157
-    real mod.io + 4,965 real Nexus) were never migrated in at all. Plan at
-    `docs/superpowers/plans/2026-08-07-b26-phase4-collection-comments-and-comment-dedup.md`
-    covers both as code tasks plus a non-code follow-up list (the
+11. B26 Phase 4 (see dedicated section above) -- **complete, 2026-08-07**.
+    Two DB gaps found during a completeness audit: the retired
+    `mod_comments` view double-counted ~56K superseded mod.io comments (a
+    real live bug), and Collections' own comment threads (157 real mod.io +
+    4,965 real Nexus) were never migrated in at all. Both fixed and
+    independently verified against the real candidate DB -- `mod_comments`
+    modio rows corrected 132,276 -> 76,043; 157 + 4,965 collection comments
+    inserted into the new `catalog_collection_comments` table;
+    `integrity_check: ok`, zero FK violations. Non-code follow-ups (the
     `platform_listings` count question, the Nexus-Collections-file-placement
-    decision). This is expected to be the last DB-completeness work needed
-    for this project's defined reference-data scope -- Load Order Guidance
-    doc research (item 8) remains the only other open thread, and it's an
-    explicitly separate cross-project effort, not part of this repo's own
-    scope.
+    decision) remain open, tracked in the plan doc, not blocking. This is
+    the last DB-completeness work identified for this project's defined
+    reference-data scope -- Load Order Guidance doc research (item 8)
+    remains the only other open thread project-wide, and it's an explicitly
+    separate cross-project effort, not part of this repo's own scope.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.
