@@ -36,6 +36,18 @@ def create_fixture_db(conn: sqlite3.Connection) -> None:
           UNIQUE (corpus_uuid, provider_object_type, provider_native_id)
         );
 
+        CREATE TABLE migration_history (
+            migration_id INTEGER PRIMARY KEY,
+            migration_name TEXT UNIQUE NOT NULL,
+            schema_version TEXT NOT NULL,
+            applied_at TEXT NOT NULL,
+            actor_session TEXT NOT NULL,
+            source_db_sha256 TEXT NOT NULL,
+            row_count_before TEXT NOT NULL,
+            row_count_after TEXT NOT NULL,
+            notes TEXT
+        );
+
         -- Intentionally the OLD (pre-fix, buggy) view definition -- no
         -- supersession filter. test_superseded_corpus_rows_excluded_after_fix
         -- needs to reproduce the bug first, then calls rebuild_mod_comments_view()
@@ -78,7 +90,10 @@ def insert_comment(conn, source_record_uuid, corpus_uuid, native_id):
     )
 
 
-def add_collections_tables(conn: sqlite3.Connection) -> None:
+def add_catalog_collections_table(conn: sqlite3.Connection) -> None:
+    """Just catalog_collections -- for tests exercising run_migration(), which
+    creates catalog_collection_comments itself and would collide with
+    add_collections_tables() pre-creating it."""
     conn.executescript(
         """
         CREATE TABLE catalog_collections (
@@ -89,7 +104,14 @@ def add_collections_tables(conn: sqlite3.Connection) -> None:
             collection_name TEXT NOT NULL,
             UNIQUE(platform, collection_native_id)
         );
+        """
+    )
 
+
+def add_collections_tables(conn: sqlite3.Connection) -> None:
+    add_catalog_collections_table(conn)
+    conn.executescript(
+        """
         CREATE TABLE catalog_collection_comments (
             comment_uuid TEXT PRIMARY KEY,
             collection_uuid TEXT NOT NULL REFERENCES catalog_collections(collection_uuid),

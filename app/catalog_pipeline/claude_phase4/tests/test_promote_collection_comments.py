@@ -1,3 +1,4 @@
+import hashlib
 import json
 import sqlite3
 from pathlib import Path
@@ -10,12 +11,21 @@ from app.catalog_pipeline.claude_phase4.promote_collection_comments import (
     parse_modio_comment_line,
     parse_nexus_comment_line,
     insert_collection_comments,
+    run_migration,
 )
 from app.catalog_pipeline.claude_phase4.tests.fixtures import (
     create_fixture_db,
     add_collections_tables,
+    add_catalog_collections_table,
     insert_collection,
 )
+
+
+def _sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        digest.update(fh.read())
+    return digest.hexdigest()
 
 
 @pytest.fixture
@@ -153,3 +163,84 @@ def test_insert_collection_comments_idempotent(conn, tmp_path):
     conn.commit()
     with pytest.raises(sqlite3.IntegrityError):
         insert_collection_comments(conn, "modio", f, "deadbeef", lookup)
+
+
+@pytest.fixture
+def db_and_sources(tmp_path):
+    db_path = tmp_path / "candidate.db"
+    conn = sqlite3.connect(str(db_path))
+    create_fixture_db(conn)
+    add_catalog_collections_table(conn)
+    insert_collection(conn, "u1", "modio", "2498")
+    insert_collection(conn, "u2", "nexus", "bvfixx")
+    conn.commit()
+    conn.close()
+
+    modio_path = tmp_path / "modio_comments.jsonl"
+    modio_path.write_text(
+        json.dumps(
+            {"collection_id": 2498, "id": 1, "content": "hi", "user": {"id": 1, "username": "a"}}
+        )
+        + "\n"
+    )
+    nexus_path = tmp_path / "nexus_comments.jsonl"
+    nexus_path.write_text(
+        json.dumps({"collection_slug": "bvfixx", "comment_id": "500", "body": "hey"}) + "\n"
+    )
+    return db_path, modio_path, nexus_path
+
+
+def test_run_migration_full_run_inserts_rows(db_and_sources):
+    db_path, modio_path, nexus_path = db_and_sources
+    sha256 = _sha256_of(db_path)
+    receipt = run_migration(db_path, sha256, modio_path, nexus_path)
+    assert receipt["modio_rows_inserted"] == 1
+    assert receipt["nexus_rows_inserted"] == 1
+
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute("SELECT COUNT(*) FROM catalog_collection_comments").fetchone()[0]
+    conn.close()
+    assert count == 2
+
+
+def test_run_migration_second_run_raises_integrity_error(db_and_sources):
+    db_path, modio_path, nexus_path = db_and_sources
+    first_sha256 = _sha256_of(db_path)
+    run_migration(db_path, first_sha256, modio_path, nexus_path)
+
+    second_sha256 = _sha256_of(db_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        run_migration(db_path, second_sha256, modio_path, nexus_path)
+
+
+def test_run_migration_second_run_does_not_change_row_counts(db_and_sources):
+    db_path, modio_path, nexus_path = db_and_sources
+    first_sha256 = _sha256_of(db_path)
+    run_migration(db_path, first_sha256, modio_path, nexus_path)
+
+    conn = sqlite3.connect(str(db_path))
+    before_retry = conn.execute("SELECT COUNT(*) FROM catalog_collection_comments").fetchone()[0]
+    conn.close()
+
+    second_sha256 = _sha256_of(db_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        run_migration(db_path, second_sha256, modio_path, nexus_path)
+
+    conn = sqlite3.connect(str(db_path))
+    after_retry = conn.execute("SELECT COUNT(*) FROM catalog_collection_comments").fetchone()[0]
+    conn.close()
+    assert after_retry == before_retry == 2
+
+
+def test_run_migration_writes_migration_history_row(db_and_sources):
+    db_path, modio_path, nexus_path = db_and_sources
+    sha256 = _sha256_of(db_path)
+    run_migration(db_path, sha256, modio_path, nexus_path)
+
+    conn = sqlite3.connect(str(db_path))
+    row = conn.execute(
+        "SELECT migration_name, schema_version, row_count_before, row_count_after "
+        "FROM migration_history WHERE migration_name = 'b26-phase4-collection-comments'"
+    ).fetchone()
+    conn.close()
+    assert row == ("b26-phase4-collection-comments", "phase4", "0", "2")

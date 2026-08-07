@@ -60,6 +60,10 @@ def run_fix(db_path: Path, expected_sha256: str) -> dict:
 
     conn = sqlite3.connect(str(db_path))
     try:
+        # Foreign keys are connection-local and off by default in SQLite --
+        # matches the pattern claude_phase3/promote_comment_evidence.py
+        # already establishes for this project's migrations.
+        conn.execute("PRAGMA foreign_keys = ON")
         # Python's sqlite3 module only auto-opens an implicit transaction
         # before DML, not before DDL (CREATE/DROP autocommit individually) --
         # SQLite itself fully supports transactional DDL, so an explicit
@@ -73,11 +77,44 @@ def run_fix(db_path: Path, expected_sha256: str) -> dict:
                     "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
                 ).fetchall()
             )
+
+            # Claim the migration slot first: migration_history.migration_name
+            # is UNIQUE, so a rerun raises IntegrityError right here -- before
+            # the view is touched at all -- giving the deterministic "fails
+            # cleanly, never silently no-ops" behavior this project's
+            # migrations require, and matching promote_comment_evidence.py's
+            # own migration_history bookkeeping (which this script previously
+            # skipped entirely).
+            conn.execute(
+                """INSERT INTO migration_history
+                   (migration_name, schema_version, applied_at, actor_session,
+                    source_db_sha256, row_count_before, row_count_after, notes)
+                   VALUES (?, 'phase4', ?, 'claude-code-phase4', ?, ?, ?, 'pending')""",
+                (
+                    "b26-phase4-mod-comments-view-fix",
+                    datetime.now(timezone.utc).isoformat(),
+                    expected_sha256,
+                    str(sum(before.values())),
+                    str(sum(before.values())),
+                ),
+            )
+
             rebuild_mod_comments_view(conn)
             after = dict(
                 conn.execute(
                     "SELECT platform, COUNT(*) FROM mod_comments GROUP BY platform"
                 ).fetchall()
+            )
+
+            conn.execute(
+                """UPDATE migration_history SET row_count_after = ?, notes = ?
+                   WHERE migration_name = ?""",
+                (
+                    str(sum(after.values())),
+                    f"modio {before.get('modio', 0)}->{after.get('modio', 0)}, "
+                    f"nexus {before.get('nexus', 0)}->{after.get('nexus', 0)}",
+                    "b26-phase4-mod-comments-view-fix",
+                ),
             )
             conn.commit()
         except Exception:

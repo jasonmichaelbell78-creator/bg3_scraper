@@ -142,6 +142,10 @@ def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_p
 
     conn = sqlite3.connect(str(db_path))
     try:
+        # Foreign keys are connection-local and off by default in SQLite --
+        # matches the pattern claude_phase3/promote_comment_evidence.py
+        # already establishes for this project's migrations.
+        conn.execute("PRAGMA foreign_keys = ON")
         # Python's sqlite3 module only auto-opens an implicit transaction
         # before DML, not before DDL (CREATE TABLE/INDEX autocommit
         # individually) -- SQLite itself fully supports transactional DDL,
@@ -151,6 +155,26 @@ def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_p
         # partially populated).
         conn.execute("BEGIN")
         try:
+            # Claim the migration slot first: migration_history.migration_name
+            # is UNIQUE, so a rerun raises IntegrityError right here -- before
+            # CREATE TABLE ever runs, which would otherwise fail with a
+            # confusing "table already exists" OperationalError instead of
+            # the clean, deterministic failure this project's migrations
+            # require. Also matches promote_comment_evidence.py's own
+            # migration_history bookkeeping, which this script previously
+            # skipped entirely.
+            conn.execute(
+                """INSERT INTO migration_history
+                   (migration_name, schema_version, applied_at, actor_session,
+                    source_db_sha256, row_count_before, row_count_after, notes)
+                   VALUES (?, 'phase4', ?, 'claude-code-phase4', ?, '0', '0', 'pending')""",
+                (
+                    "b26-phase4-collection-comments",
+                    datetime.now(timezone.utc).isoformat(),
+                    expected_sha256,
+                ),
+            )
+
             conn.execute(
                 """
                 CREATE TABLE catalog_collection_comments (
@@ -181,6 +205,17 @@ def run_migration(db_path: Path, expected_sha256: str, modio_path: Path, nexus_p
             )
             nexus_inserted, nexus_skipped_unmapped = insert_collection_comments(
                 conn, "nexus", nexus_path, nexus_sha256, lookup
+            )
+
+            conn.execute(
+                """UPDATE migration_history SET row_count_after = ?, notes = ?
+                   WHERE migration_name = ?""",
+                (
+                    str(modio_inserted + nexus_inserted),
+                    f"modio +{modio_inserted} (skipped {modio_skipped_unmapped} unmapped), "
+                    f"nexus +{nexus_inserted} (skipped {nexus_skipped_unmapped} unmapped)",
+                    "b26-phase4-collection-comments",
+                ),
             )
             conn.commit()
         except Exception:
