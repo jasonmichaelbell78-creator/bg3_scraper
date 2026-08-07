@@ -71,3 +71,43 @@ def insert_comment(conn, source_record_uuid, corpus_uuid, native_id):
            VALUES (?, ?, 'comment', ?, 'x', '{}', 'x')""",
         (source_record_uuid, corpus_uuid, native_id),
     )
+
+
+def add_collections_tables(conn: sqlite3.Connection) -> None:
+    conn.executescript(
+        """
+        CREATE TABLE catalog_collections (
+            collection_uuid TEXT PRIMARY KEY,
+            platform TEXT NOT NULL CHECK(platform IN ('modio', 'nexus')),
+            collection_native_id TEXT NOT NULL,
+            collection_slug TEXT,
+            collection_name TEXT NOT NULL,
+            UNIQUE(platform, collection_native_id)
+        );
+
+        CREATE TABLE catalog_collection_comments (
+            comment_uuid TEXT PRIMARY KEY,
+            collection_uuid TEXT NOT NULL REFERENCES catalog_collections(collection_uuid),
+            platform TEXT NOT NULL CHECK(platform IN ('modio', 'nexus')),
+            source_comment_id TEXT NOT NULL,
+            parent_source_comment_id TEXT,
+            author_display_name TEXT,
+            author_user_id TEXT,
+            observed_at TEXT,
+            body TEXT NOT NULL,
+            payload_json TEXT NOT NULL,
+            source_corpus_sha256 TEXT NOT NULL,
+            source_line_number INTEGER NOT NULL,
+            UNIQUE(platform, source_comment_id)
+        );
+        CREATE INDEX idx_catalog_collection_comments_collection
+            ON catalog_collection_comments(collection_uuid, platform);
+        """
+    )
+
+
+def insert_collection(conn, collection_uuid, platform, native_id, name="Test"):
+    conn.execute(
+        "INSERT INTO catalog_collections (collection_uuid, platform, collection_native_id, collection_slug, collection_name) VALUES (?, ?, ?, ?, ?)",
+        (collection_uuid, platform, native_id, native_id, name),
+    )
