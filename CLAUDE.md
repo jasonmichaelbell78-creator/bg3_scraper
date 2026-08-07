@@ -1226,6 +1226,14 @@ neither finding below was previously documented anywhere (not here, not in
   - Receipts: `catalog/B26/phase4_view_fix_receipt.json`,
     `catalog/B26/phase4_collection_comments_receipt.json` (both
     gitignored alongside `catalog/`, same as Phase 3's own receipt).
+- **Correction (2026-08-07, found during Phase 1 Gap Analysis below)**: this
+  section's own closing claim ("the last DB-completeness work identified for
+  this project's defined reference-data scope") turned out to be premature —
+  the loadout-advisor total-project-plan, written the same day right after
+  this section, reframed "complete" away from "covers its originally-scoped
+  tables" toward "covers what the advisor conversation actually needs," and
+  found real gaps under that reframing. See the Phase 1 Gap Analysis section
+  below.
 - **Both remaining low-priority follow-ups closed, 2026-08-07**:
   - **Backup suffix collision (Phase4-vs-Phase4)**: `fix_mod_comments_view.py`
     and `promote_collection_comments.py` shared one `.pre-phase4-backup`
@@ -1247,6 +1255,71 @@ neither finding below was previously documented anywhere (not here, not in
     `b26-phase4-collection-comments` (0 → 5,122) — `integrity_check: ok`,
     zero FK violations. Final DB hash: `3f925145...`. Receipt:
     `catalog/B26/phase4_migration_history_backfill_receipt.json`.
+
+## Total Project Plan Phase 1: Gap Analysis — COMPLETE (2026-08-07)
+Executed `docs/superpowers/specs/2026-08-07-total-project-plan-to-loadout-advisor.md`'s
+Phase 1 in full: pure SQL audit against the local candidate DB, no new
+scraping. Full findings in
+`docs/superpowers/specs/2026-08-07-catalog-gap-report.md`.
+
+- **Pre-audit environment fix, worth recording**: this machine's local
+  `catalog/B26/` (gitignored, per-machine) was stale — stuck at Phase 3,
+  missing all of Phase 4 (no `catalog_collection_comments` table, `mod_comments`
+  still showing the buggy 132,276 modio rows). Phase 4 had run in the
+  `effective-garbanzo` Codespace and never synced back locally. Fixed by
+  `gh codespace ssh`-verifying the Codespace's copy first (confirmed all 5
+  `migration_history` rows, correct 76,043/451,885 modio/nexus comment
+  split, `catalog_collection_comments` present with 5,122 rows), then
+  `gh codespace cp`-ing the 1.5GB main candidate DB plus the three Phase 4
+  receipt JSONs down before running anything — same "verify before trusting
+  a local copy" discipline as the earlier `nexus_comments_merged.jsonl` and
+  `modio_comments_merged.jsonl` incidents above.
+- **Two Blocking-severity gaps found** (advisor would frequently have to
+  guess or live-search without this): **item/equipment injection +
+  ParaTool** (confirms the original triggering finding — 12.1% mod coverage,
+  and 87.3% of that thin slice is unverified auto-parsed description text)
+  and **load-order positioning rules** (`load_order_hints` covers only 3.1%
+  of mods, single-sourced from description parsing; the separate
+  `evidence_claims` load_order signal is 99.6% unreviewed `proposed` state).
+- **Six Significant-severity gaps**: shared-table/override conflicts
+  (Progressions/ClassDescriptions/SpellLists/CharacterVisuals — zero
+  structural representation anywhere, confirmed via full schema search, not
+  assumed); deployment type (PAK/MOD FIXER/LOOSE FILES/NATIVE/MANUAL/SCRIPT
+  EXTENDER — zero dedicated representation); patch-8/maintenance status
+  (`risk_flags.not_maintained` only 0.7% of mods); known-broken/
+  community-patch status (1.5%, narrow ad hoc category set); incompatibility
+  evidence (3,184 claims but 99.6% unreviewed — already designed around via
+  the loadout-advisor's `evidence_to_review` pattern, flagged as context not
+  a new design gap).
+- **A real documentation error found and corrected**: the loadout-advisor
+  design doc's "Known limitation" section claims `mod_classifications`
+  covers "8,249 of 19,967 mods (~41%)". Direct query shows 8,249 is the
+  **row** count (mods can carry multiple terms) — actual **distinct-mod**
+  coverage is 3,649 (**18.3%**), less than half the stated figure. Doesn't
+  change that design's conclusion (`catalog_browse_labels` at 100% was
+  already correctly identified as the more reliable fallback), but the
+  number itself needs fixing in
+  `docs/superpowers/specs/2026-08-07-loadout-advisor-design.md` before that
+  design resumes, so Phase 4 doesn't plan against a wrong figure.
+- **Four Minor-severity gaps, four confirmed not-a-gap, one confirmed
+  correctly out-of-DB-scope by design** — full detail in the Gap Report;
+  summary: NSFW/nudity (86 mods flagged via classification terms, better
+  covered than the plan's starting assumption of "no structural flag" at
+  all), companion/class/race special handling (thematic-only, already
+  designed around via the browse-labels fallback), author-declared
+  framework exceptions (zero representation, narrow edge case), comment
+  qualitative color (38.9% of listings, naturally tracks popularity/what
+  gets recommended anyway); dependencies/thematic-browse/popularity/
+  curated-bundles all well covered, no action needed; technical
+  log-reading knowledge correctly has zero DB representation because it's
+  meant to live in the Load Order Guidance doc (v14 §1.1), not the catalog.
+- **Next**: Phase 2 (Source Research) should prioritize the two Blocking
+  domains first, then the five actionable Significant ones (the
+  incompatibility-evidence one is already handled by design). Several
+  likely high-value sources (Nexus Collections discussion, Discord, mod
+  README/changelog pages) plausibly need real browser access
+  (`claude-in-chrome`), which may be environment-dependent the same way the
+  Load Order Guidance research was — not yet tested for this specific work.
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
@@ -1319,6 +1392,17 @@ neither finding below was previously documented anywhere (not here, not in
     reference-data scope -- Load Order Guidance doc research (item 8)
     remains the only other open thread project-wide, and it's an explicitly
     separate cross-project effort, not part of this repo's own scope.
+12. Total Project Plan Phase 1: Gap Analysis (see dedicated section above) --
+    **complete, 2026-08-07**. Found 2 Blocking and 6 Significant gaps against
+    what the loadout-advisor conversation actually needs (item injection/
+    ParaTool confirmed, load-order positioning rules, shared-table conflicts,
+    deployment type, patch-8/maintenance status, known-broken status,
+    unreviewed incompatibility evidence), plus corrected a stale "41%"
+    `mod_classifications` coverage claim to the real 18.3%. Full report:
+    `docs/superpowers/specs/2026-08-07-catalog-gap-report.md`. Next: Phase 2
+    (Source Research) against the Blocking/Significant list, prioritizing
+    item injection/ParaTool and load-order positioning rules first --
+    not started yet, likely needs real browser access for several sources.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.

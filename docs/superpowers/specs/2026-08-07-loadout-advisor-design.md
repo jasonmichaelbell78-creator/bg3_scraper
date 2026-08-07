@@ -137,4 +137,4 @@ Standard TDD, matching this project's established pattern (`app/catalog_pipeline
 
 ## Known limitation to design around, not discover mid-session
 
-`mod_classifications` covers 8,249 of 19,967 mods (~41%) as of the 2026-08-07 audit. Thematic search via classification data will have real gaps; `catalog_browse_labels` (populated for all 19,967) and live evidence/comment lookups are the more reliable fallback when classification data is thin for a candidate mod.
+`mod_classifications` covers 3,649 of 19,967 mods (~18.3%) as of the 2026-08-07 Phase 1 Gap Analysis audit (`docs/superpowers/specs/2026-08-07-catalog-gap-report.md`) -- corrected from an earlier "8,249 (~41%)" figure, which was actually the table's *row* count (mods can carry multiple classification terms), not the distinct-mod count. Thematic search via classification data will have real gaps; `catalog_browse_labels` (populated for all 19,967) and live evidence/comment lookups are the more reliable fallback when classification data is thin for a candidate mod.
