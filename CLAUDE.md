@@ -1007,6 +1007,124 @@ session:
   `worktree-b26-phase3-comment-evidence` worktree/branch (local + remote,
   confirmed superseded — missing Tasks 6-8 that landed on `main`).
 
+## B26 Phase 4: comment dedup fix + collection comments migration — COMPLETE (2026-08-07)
+Prompted by a user question about whether the Nexus/mod.io Collections
+inverse lookup (mod → its collections) needs new scraping and whether "all
+data" is now in the DB. Answered both by querying
+`catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db`
+directly rather than trusting this file's own narrative — worthwhile, since
+neither finding below was previously documented anywhere (not here, not in
+`app/manifests/DB_PROJECT_GAP_REPORT_2026-07-30.md`).
+
+- **Inverse lookup: already answerable, no new work needed.** The full
+  Collections sweep (2026-07-24) captured collection→mod membership, not
+  just collection metadata, and it's already loaded into
+  `catalog_collection_memberships` (49,907 rows = 35,534 mod.io + 14,373
+  Nexus, exact match) with a `mapped_listing_uuid` FK back to
+  `platform_listings` wherever resolvable (mod.io 35,483/35,534 resolved =
+  99.9%; Nexus 13,415/14,373 = 93.3%). "Which collections is mod X in" is
+  already a plain `SELECT ... WHERE mapped_listing_uuid = ?`.
+- **Gap 1 (real bug, live in the DB today): the retired `mod_comments` view
+  double-counts ~56K mod.io comments.** The schema has a
+  `evidence_corpora.supersedes_corpus_uuid` column specifically so a
+  corrected corpus can supersede a buggy one — and the two corrected mod.io
+  comment corpora (`modio_comments_base_under_page_limit_2026-07-21`,
+  44,777 rows; `modio_comments_deep_refresh_2026-07-21`, 31,266 rows —
+  76,043 total, matching `modio_comments_merged.jsonl` exactly) do correctly
+  declare `supersedes_corpus_uuid` pointing at the old buggy
+  `modio_fullsweep_comments_2026-07-10` corpus (56,233 rows, the known
+  ~100-comment-per-mod-capped sweep). But the `mod_comments` view's `WHERE`
+  clause never actually filters on that column, so **all three corpora's
+  rows surface simultaneously** — confirmed 56,231 of the buggy corpus's
+  56,233 `provider_native_id` values also exist in the corrected corpora
+  (near-total overlap, as expected for stable comment IDs), i.e. ~56K
+  duplicate/stale comment rows are live in the view right now for the
+  ~4,361 mods that originally hit the pagination cap. `mod_comments` totals
+  132,276 mod.io rows when the correct number is 76,043.
+- **Gap 2: Collections' own comment threads were captured but never
+  migrated into the DB at all.** No `evidence_corpora` row, no dedicated
+  table — the six delivered Collections files cover metadata and
+  membership only. **Correction to this file's own 2026-07-24 entry**: the
+  "968 real comment rows" figure recorded there for mod.io Collections was
+  actually the *file's total line count* (968), not the real-comment count
+  — verified directly against `data/collections/modio/
+  modio_collections_comments.jsonl`: 811 of those 968 lines are
+  `_status: "no_comments"` sentinels, leaving **157 real mod.io collection
+  comments** (across 843 collections, `reply_id`/`thread_position` carry
+  threading). Nexus checks out close to its documented figure:
+  `data/collections/nexus/nexus_collections_comments.jsonl` has 34
+  sentinels + **4,965 real comments** (vs. the "4,963" originally
+  documented — trivial, within likely recount noise) across 87 collections,
+  `parent_comment_id` carries threading. Both files' `collection_id`/
+  `collection_slug` fields cleanly join to `catalog_collections.
+  collection_native_id` (100% populated on both platforms, confirmed).
+- **Still open, unresolved, not something to fix unilaterally**: the
+  2026-07-30 gap report's §2.4 question — `platform_listings` = 11,809
+  Nexus rows, which doesn't cleanly match either the documented 16,191-mod
+  full sweep or the 3,662-mod curated tier list — is still unexplained.
+  Codex's Phase 1 Coverage migration logic (where this filtering/dedup
+  would happen) wasn't built by this session and hasn't been inspected;
+  this still needs the Codex conference the 2026-07-30 report already
+  recommended, not a guess.
+- **Plan executed 2026-08-07**: `docs/superpowers/plans/2026-08-07-b26-phase4-collection-comments-and-comment-dedup.md`
+  covers both gaps as real code tasks (view fix + a new
+  `catalog_collection_comments` table/migration), plus a non-code
+  follow-up list for the platform_listings question and the still-open
+  Nexus-Collections-file-placement decision from the 2026-07-24 Collections
+  section above. Built via subagent-driven-development (Tasks 1-2, fresh
+  implementer + reviewer per task, both approved with only minor/
+  plan-inherited findings — logged in `.superpowers/sdd/2026-08-07-b26-
+  phase4-collection-comments-and-comment-dedup/progress.md`, not blocking).
+- **Real migration run (Task 3) executed and independently verified,
+  2026-08-07.** One correction made in-flight: the plan's "last known-good"
+  pre-migration hash (`cb37e039...`) was actually the *pre-Phase-3*
+  baseline from the 2026-07-30 gap report — stale, since Phase 3's own
+  2026-08-06 run already changed the file. Caught by the plan's own
+  "never override an unexplained mismatch" gate; resolved by cross-checking
+  against `catalog/B26/phase3_migration_receipt.json`'s own recorded
+  `candidate_sha256_after` (`cdefc294...`), which matched the live file
+  exactly — confirming the file was in its correct, expected post-Phase-3
+  state, just not the hash this plan had recorded. Proceeded with the
+  confirmed-correct hash.
+  - **View fix**: `mod_comments` modio rows 132,276 → 76,043 (exact match to
+    prediction), nexus unchanged at 451,885.
+  - **Collection comments migration**: 157 mod.io + 4,965 Nexus rows
+    inserted into the new `catalog_collection_comments` table (exact match
+    to prediction).
+  - **Independently verified** (not just the scripts' own receipts): all
+    four counts re-queried directly and matched; zero dangling
+    `collection_uuid` references in the new table (direct LEFT JOIN check);
+    `PRAGMA integrity_check` → `ok`; `PRAGMA foreign_key_check` → zero rows;
+    a 3-row spot-check of `catalog_collection_comments` showed real,
+    correctly-linked comment content.
+  - **Incident found during the run, not a data-loss event but worth
+    recording**: `promote_comment_evidence.py`'s `backup_database()` (reused
+    by both Phase 4 scripts per the plan's DRY constraint) hardcodes a
+    `.pre-phase3-backup` suffix — flagged as a Minor, non-blocking risk in
+    Task 1's review, and it materialized immediately in practice. Running
+    the view-fix step overwrote whatever backup previously lived at that
+    path (there wasn't a real Phase 3 one still there to lose — Phase 3's
+    original backup had already served its purpose and Drive independently
+    retains the true pre-Phase-3 baseline at `cb37e039...`, confirmed in
+    `Google Drive/PROJECT_RECORD.md`) with a fresh copy of the
+    post-Phase-3/pre-Phase-4 state. Before the collection-comments step
+    could overwrite that in turn, it was manually copied aside to
+    `catalog/B26/BG3_Reference_Catalog_v1_1_Working_B26_Phase1_Coverage_candidate.db.pre-phase4-view-fix-backup`
+    (hash `cdefc294...`) so it wasn't lost. **Follow-up worth doing if
+    `promote_comment_evidence.py` is ever touched again**: rename the
+    hardcoded suffix to something migration-specific, or add an
+    existence/overwrite guard — this collision will recur on every future
+    phase that reuses `backup_database()` as-is.
+  - Backup chain as of this run's completion: `.pre-phase3-backup` now
+    holds the pre-collection-comments/post-view-fix state (hash
+    `e31f9cf5...`); `.pre-phase4-view-fix-backup` holds the
+    post-Phase-3/pre-Phase-4 state (hash `cdefc294...`); Drive holds the
+    true pre-Phase-3 original (`cb37e039...`). Final DB hash after both
+    Phase 4 migrations: `9beca985...`.
+  - Receipts: `catalog/B26/phase4_view_fix_receipt.json`,
+    `catalog/B26/phase4_collection_comments_receipt.json` (both
+    gitignored alongside `catalog/`, same as Phase 3's own receipt).
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
@@ -1063,6 +1181,21 @@ session:
     passed full independent verification. Remaining loose end: none for
     Phase 3 itself; next open item project-wide is item 8 (Load Order
     Guidance doc research), not otherwise progressed this session.
+11. B26 Phase 4 (see dedicated section above) -- **complete, 2026-08-07**.
+    Two DB gaps found during a completeness audit: the retired
+    `mod_comments` view double-counted ~56K superseded mod.io comments (a
+    real live bug), and Collections' own comment threads (157 real mod.io +
+    4,965 real Nexus) were never migrated in at all. Both fixed and
+    independently verified against the real candidate DB -- `mod_comments`
+    modio rows corrected 132,276 -> 76,043; 157 + 4,965 collection comments
+    inserted into the new `catalog_collection_comments` table;
+    `integrity_check: ok`, zero FK violations. Non-code follow-ups (the
+    `platform_listings` count question, the Nexus-Collections-file-placement
+    decision) remain open, tracked in the plan doc, not blocking. This is
+    the last DB-completeness work identified for this project's defined
+    reference-data scope -- Load Order Guidance doc research (item 8)
+    remains the only other open thread project-wide, and it's an explicitly
+    separate cross-project effort, not part of this repo's own scope.
 
 ## Security note
 `bg3_scraper.py` previously had a mod.io API key hardcoded in plaintext.

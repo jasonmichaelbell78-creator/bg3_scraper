@@ -39,8 +39,8 @@ def verify_db_hash(db_path: Path, expected_sha256: str) -> None:
         )
 
 
-def backup_database(db_path: Path) -> Path:
-    backup_path = db_path.with_name(db_path.name + ".pre-phase3-backup")
+def backup_database(db_path: Path, suffix: str = ".pre-phase3-backup") -> Path:
+    backup_path = db_path.with_name(db_path.name + suffix)
     shutil.copy2(db_path, backup_path)
     return backup_path
 
@@ -253,6 +253,12 @@ def promote_triage_hits(
 
 def retire_mod_comments_table(conn: sqlite3.Connection) -> None:
     conn.execute("DROP TABLE mod_comments")
+    # Kept in sync with claude_phase4/fix_mod_comments_view.py's NEW_VIEW_SQL
+    # -- see that module if this ever needs the identical fix applied to a
+    # different view. The AND clause below excludes any corpus that another
+    # corpus's supersedes_corpus_uuid names, so a superseded corpus's rows
+    # (e.g. an old, capped comment sweep replaced by a corrected re-scrape)
+    # don't surface as duplicates alongside the corpus that replaced them.
     conn.execute(
         """CREATE VIEW mod_comments AS
            SELECT
@@ -266,7 +272,11 @@ def retire_mod_comments_table(conn: sqlite3.Connection) -> None:
                esr.payload_json AS payload_json
            FROM evidence_source_records esr
            JOIN evidence_corpora ec ON ec.corpus_uuid = esr.corpus_uuid
-           WHERE esr.provider_object_type = 'comment'"""
+           WHERE esr.provider_object_type = 'comment'
+             AND ec.corpus_uuid NOT IN (
+                 SELECT supersedes_corpus_uuid FROM evidence_corpora
+                 WHERE supersedes_corpus_uuid IS NOT NULL
+             )"""
     )
 
 

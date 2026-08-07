@@ -368,7 +368,15 @@ class TestRetireModComments(unittest.TestCase):
     def test_mod_comments_view_returns_evidence_data(self):
         retire_mod_comments_table(self.candidate)
         count = self.candidate.execute("SELECT COUNT(*) FROM mod_comments").fetchone()[0]
-        self.assertEqual(count, 6)  # 3 modio fixture rows + 3 nexus rows inserted in setUp
+        # 1 modio row + 3 nexus rows inserted in setUp -- NOT 3 modio rows.
+        # The fixture's modio evidence is split across two corpora:
+        # 'f12290b9...' (2 rows, comment_ids 9001/9002) and 'e88d8457...'
+        # (1 row, comment_id 9003), with e88d8457 declaring
+        # supersedes_corpus_uuid='f12290b9...'. The view's supersession
+        # filter (see retire_mod_comments_table) excludes f12290b9's 2 rows,
+        # leaving only e88d8457's 1 row visible -- matching the corrected,
+        # Phase-4-parity SQL rather than the old buggy (pre-fix) count.
+        self.assertEqual(count, 4)
 
     def test_mod_comments_view_exposes_platform_and_source_comment_id(self):
         retire_mod_comments_table(self.candidate)
