@@ -1058,14 +1058,33 @@ neither finding below was previously documented anywhere (not here, not in
   `parent_comment_id` carries threading. Both files' `collection_id`/
   `collection_slug` fields cleanly join to `catalog_collections.
   collection_native_id` (100% populated on both platforms, confirmed).
-- **Still open, unresolved, not something to fix unilaterally**: the
-  2026-07-30 gap report's §2.4 question — `platform_listings` = 11,809
-  Nexus rows, which doesn't cleanly match either the documented 16,191-mod
-  full sweep or the 3,662-mod curated tier list — is still unexplained.
-  Codex's Phase 1 Coverage migration logic (where this filtering/dedup
-  would happen) wasn't built by this session and hasn't been inspected;
-  this still needs the Codex conference the 2026-07-30 report already
-  recommended, not a guess.
+- **Resolved 2026-08-07 (Codex conference)**: the 2026-07-30 gap report's
+  §2.4 question — why `platform_listings` = 11,809 Nexus rows doesn't
+  cleanly match the 18,570-mod full sweep, the 13,864-mod full-metadata
+  subset, or the 3,662-mod curated tier list. **Answer: it's not a Phase 1
+  filter/dedup/exclusion at all.** The 11,809 figure is inherited whole
+  from a pre-existing **B25 catalog baseline** — Phase 1 Coverage
+  (`register_phase1_coverage.py`, whose own docstring reads "migration from
+  B25") was a browse-label/Collections-linking pass over B25's already-
+  fixed 19,967-listing universe, not a fresh ingestion of
+  `nexus_bg3_scraper.py`'s raw output. Independently verified locally
+  (not just taken on Codex's word): the migration's recorded
+  `source_db_sha256` (`27783c96...`) matches the hash of a
+  `BG3_Reference_Catalog..._B25_C5_review_batch4_final_candidate_stream.db`
+  file referenced in `docs/superpowers/specs/2026-08-04-b26-pipeline-review-findings.md:388`
+  — a real, pre-existing B25 artifact, not an assertion. So B26 "did not
+  newly filter, deduplicate, or exclude 2,055 Nexus records" (Codex's
+  wording) — Phase 1 simply never touched that count either way.
+  **Remaining open question, reclassified**: not a Phase 1 discrepancy —
+  it's **pre-B25 catalog-source lineage, unresolved**: what earlier
+  catalog-build scope produced B25's 11,809-Nexus baseline out of the
+  larger 18,570-mod scraper inventory in the first place. Codex proposes a
+  bounded, read-only lineage audit (confirm B25 and B26 share the same
+  Nexus native-ID set; identify which earlier import artifact/loader
+  established the B25 set) as worthwhile for documentation quality, but
+  **explicitly not blocking** — no B26 mutation, re-ingestion, or source
+  recapture is justified by this count alone. Not scheduled; revisit if
+  the lineage question ever becomes load-bearing for something else.
 - **Plan executed 2026-08-07**: `docs/superpowers/plans/2026-08-07-b26-phase4-collection-comments-and-comment-dedup.md`
   covers both gaps as real code tasks (view fix + a new
   `catalog_collection_comments` table/migration), plus a non-code
