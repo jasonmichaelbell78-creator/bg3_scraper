@@ -947,6 +947,61 @@ session:
   feature (out of scope for this round, not attempted), and the private
   Facebook modding group (found, not requested).
 
+## Load Order Guidance v14: technical-diagnostics section (2026-08-07)
+Prompted by a "let's brainstorm a final deliverable" conversation that started
+scoping a conversational modlist-advisor process (recommend mods for a
+described playthrough, build a load order, help troubleshoot) built on top
+of this project's reference catalog -- brainstorming paused mid-design when
+the user asked whether any research existed on reading BG3MM's or BG3's own
+error logs specifically, to minimize troubleshooting guesswork. Checked
+directly: v13 had real symptom-based troubleshooting knowledge but zero
+systematic reference for actual log file locations/formats -- a genuine
+gap, not something to assume was already covered.
+
+- **A different kind of research pass than v10-v13**: instead of mining
+  community sources (forums/Discord/Reddit) for symptom reports, this round
+  went to primary technical sources -- cloned and read BG3ModManager's own
+  GitHub source code directly (not a summary), fetched Norbyte's `bg3se`
+  README and issue tracker directly, and reached the official
+  `docs.baldursgate3.game` Osiris debugging page.
+- **Corrected a wrong third-party claim** (the second time this document
+  has done this, see v13 §7.3 for the first): a troubleshooting site
+  claimed BG3ModManager's log lives in `%APPDATA%\BG3ModManager`. The real
+  answer, confirmed directly from `MainWindow.xaml.cs`, is a `_Logs` folder
+  next to the executable itself.
+- **New technical content added as §1.1** (a real escalation path appended
+  directly to the existing triage table, not a separate section, so "read
+  §1 first" stays an honest promise): BG3MM's log location/filename/format
+  and two non-public auto-enable triggers (any error dialog silently turns
+  logging on; an empty file named `debug` next to the EXE forces it every
+  launch); the Osiris Log's two genuinely separate forms (via the Toolkit
+  vs. via Script Extender's `LogDirectory`/`LogRuntime`, which turned out to
+  be two different settings, not one path stated two ways) plus the
+  open-source `BG3-Osiris-Log-Kit` tool that packages both; Script
+  Extender's own install-layer error codes (`LoadLibrary` 1114, DLL
+  extraction failures, CDN-blocked regions, Linux/Proton DLL requirements).
+- **v14 built the same way v13 was**: full document reconstructed from the
+  real v13 content (fetched via the Drive MCP tool), not written from
+  scratch -- title/Prepared/Status updated, "What's new in v13" replaced
+  with "What's new in v14" (matching the doc's own established convention
+  of not carrying forward the previous version's changelog section), §1.1
+  inserted, §9.6 added recording this round's sourcing in the same detail
+  level as §9.5's v13 entry.
+- **Uploaded to `BG3/LOAD_ORDER_GUIDANCE/`** (file id
+  `1l1V_71gFnCHV_s52eu8I1KE3R-UDb9YS`, 93,619 bytes, confirmed intact via
+  `get_file_metadata`'s content snippet -- `read_file_content` returned an
+  empty string for this file, a tool quirk with plain-markdown mime types
+  rather than a real data problem) and saved to the local Drive mirror as
+  `Google Drive/BG3_Load_Order_Guidance_v14.md` (untracked, same as v13).
+  v13 was left in place alongside it in the new folder, matching this
+  project's own precedent of keeping prior versions rather than deleting
+  them.
+- **Still open**: what the base game itself writes on a vanilla crash,
+  outside of anything Script Extender produces, was not confirmed this
+  round -- deferred, not guessed at. The conversational modlist-advisor
+  design that prompted this detour is still paused mid-brainstorm, not
+  abandoned -- resume by picking the thread back up, not restarting it.
+
 ## Incident: `nexus_comments_merged.jsonl` regressed to a stale version, then recovered (2026-07-31)
 - A 2026-07-30 parity audit (`DB_PROJECT_GAP_REPORT_2026-07-30.md`, run from
   the work-computer copy of this project) found that the canonical
