@@ -1144,6 +1144,27 @@ neither finding below was previously documented anywhere (not here, not in
   - Receipts: `catalog/B26/phase4_view_fix_receipt.json`,
     `catalog/B26/phase4_collection_comments_receipt.json` (both
     gitignored alongside `catalog/`, same as Phase 3's own receipt).
+- **Both remaining low-priority follow-ups closed, 2026-08-07**:
+  - **Backup suffix collision (Phase4-vs-Phase4)**: `fix_mod_comments_view.py`
+    and `promote_collection_comments.py` shared one `.pre-phase4-backup`
+    suffix, so either script running again would silently overwrite the
+    other's backup. Each now gets its own distinct suffix
+    (`.pre-phase4-view-fix-backup` / `.pre-phase4-collection-comments-backup`).
+  - **`migration_history` backfilled for both real Phase 4 runs.** They'd
+    executed successfully before `f0404b6` added the `migration_history`
+    gate, so the live DB had no record of either — not just a cosmetic gap,
+    since it also meant a future accidental rerun of either script wouldn't
+    yet be blocked by the new `IntegrityError` protection (no existing row
+    to collide with). `backfill_migration_history.py` reads the two real
+    receipts already on disk (source of truth, nothing re-derived) and
+    inserts both rows with their real `applied_at`/row-count values. Run
+    2026-08-07 against the live candidate DB (hash-gated, backed up,
+    verified same as every other real run this project does): both rows
+    confirmed present —
+    `b26-phase4-mod-comments-view-fix` (584,161 → 527,928) and
+    `b26-phase4-collection-comments` (0 → 5,122) — `integrity_check: ok`,
+    zero FK violations. Final DB hash: `3f925145...`. Receipt:
+    `catalog/B26/phase4_migration_history_backfill_receipt.json`.
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
