@@ -8,6 +8,21 @@ against the 8 actionable findings in
 Significant; the "known-broken/community-patch" and "incompatibility
 evidence" pair get combined below where their sourcing overlaps).
 
+**Updated 2026-08-07 (adversarial review)**: the Gap Report this plan is
+built on got its own contrarian/OTB challenge pass after item injection's
+research demonstrated the value of one. See that report's "Corrections from
+adversarial review" section for the full record. Two corrections are
+already folded into domains 3 and 4 below. Two more are flagged there but
+not yet applied to this plan's priority order: (a) only 3 of 7 domains are
+actually read by the loadout-advisor's tested code today (patch-8 status,
+known-broken status, incompatibility evidence) — a consumption-weighted
+ordering would front-load those over the two Blocking, live-reasoning-only
+domains; (b) domains 1 (item injection, done), 2 (load-order), 5, and 6 all
+use the identical description/comment-corpus keyword-extraction technique
+and may be worth scoping as one shared Phase 3 utility rather than four
+separate scripts. Both are sequencing decisions for the project owner, not
+applied here.
+
 ## Tooling decision (this session)
 
 Ported the `deep-research` skill (multi-agent decompose → parallel search →
@@ -36,7 +51,27 @@ scripting task, mirroring this project's existing scraper pattern.
 
 ## Per-gap plan
 
-### 1. Item injection + ParaTool (Blocking)
+### 1. Item injection + ParaTool (Blocking) — RESEARCHED 2026-08-07
+
+Full `deep-research` run complete (12 agents, 34 claims, 51 sources, 5
+disputes formally resolved after a contrarian challenge caught real,
+zero-cost misses in the first pass). Findings promoted to
+`docs/superpowers/specs/2026-08-07-item-injection-paratool-research.md`.
+Bottom line: no master compatibility list exists (confirmed absent, not
+unfound); the schema's premise (ParaTool as a general accessibility gate)
+was wrong — it's narrowly AMP-specific and optional for most mods; the
+field name is too narrow (misses sibling tool "REL Generator"); and,
+caught only during adversarial review, `item_injection` currently has zero
+downstream consumers in the loadout-advisor code, so schema rework should
+wait on resolving that first. Two free, zero-cost signals were found
+sitting unused in already-scraped local data (a `mods.description` keyword
+scan, an AMP `dependencies`-table reverse-lookup) — see the promoted doc's
+Recommendations for the full priority order. This gap is closed for
+Phase 2 purposes; any further work on it is Phase 3 (implementation),
+not more sourcing research.
+
+<details>
+<summary>Original Phase 2 sourcing plan for this gap (superseded by the research above, kept for record)</summary>
 
 **Research question for deep-research**: Does ParaTool (or an equivalent
 tool) publish its own compatibility/mod list or detection logic that could
@@ -57,6 +92,8 @@ Phase 3 script once the methodology question above is answered.
 
 **Priority**: 1st (Blocking, and the original triggering finding).
 
+</details>
+
 ### 2. Load-order positioning rules (Blocking)
 
 **Research question**: What load-order sourcing exists beyond what Load
@@ -76,7 +113,33 @@ free/local corroborating source before any new external research.
 
 **Priority**: 2nd (Blocking).
 
-### 3. Shared-table/override conflicts (Significant)
+### 3. Shared-table/override conflicts (Significant) — REFRAMED 2026-08-07
+
+**Superseded by adversarial review**: an adversarial pass against the Gap
+Report (see `docs/superpowers/specs/2026-08-07-catalog-gap-report.md`'s
+"Corrections from adversarial review" section) found this domain is NOT a
+"zero representation, need to find external sourcing" problem as originally
+framed below. `evidence_claims.claim_text` already has 14 real, on-topic
+rows describing exactly this conflict pattern (e.g. two mods both
+overriding the same progression entry, load order deciding the winner),
+captured under existing `claim_type` values but not tagged as their own
+category. **This is a review/tagging task against data already captured,
+not a from-scratch sourcing question** — no external research needed to
+start. It's also plausibly the same underlying gap as domain 7
+(incompatibility-evidence review) wearing a different name: a
+compatibility-patch page describing a table conflict already produces
+exactly the kind of `evidence_claims` row `conflict_checker.py` already
+knows how to surface via `evidence_to_review`.
+
+**Revised approach**: fold this into domain 7's evidence-mining/review work
+rather than scoping it as an independent sourcing effort. If new external
+sourcing is still wanted after mining the existing 14+ rows (e.g. to find
+compatibility-patch pages that were never scraped as comments/descriptions
+at all), the original research question below remains a valid fallback, just
+demoted to a secondary step, not the primary path.
+
+<details>
+<summary>Original Phase 2 sourcing plan for this gap (superseded by the review above, kept for record)</summary>
 
 **Research question**: Does any existing community resource document,
 per-mod or per-mod-pair, which LSX tables (`Progressions`,
@@ -98,17 +161,25 @@ live per-candidate-list reasoning grounded in the Load Order Guidance
 doc's general override rule — not a structured DB field. Worth deep-research
 settling this explicitly rather than assuming either way.
 
-**Priority**: 3rd (Significant, but genuinely open whether it's solvable
-at the DB level at all).
+</details>
+
+**Priority**: unchanged position for now (3rd), but scope changed from
+"external sourcing" to "mine/review existing `evidence_claims` content
+first" — see domain 7 below, which this likely merges into.
 
 ### 4. Deployment type (Significant)
 
 **Local-data check done this session**: confirmed `platform_file_records`
-only has outer download archives (106,783 rows, 0 `.pak` files, 99.4% of
-listings have at least one file record) — the DB cannot answer this from
-data already scraped; the archives would need to be downloaded and
-unpacked to inspect contents directly, a materially bigger undertaking than
-this project's existing metadata-only scraping.
+only has outer download archives (106,783 rows, 99.4% of listings have at
+least one file record) — the DB cannot answer this from data already
+scraped; the archives would need to be downloaded and unpacked to inspect
+contents directly, a materially bigger undertaking than this project's
+existing metadata-only scraping. *Corrected 2026-08-07 (adversarial review
+of the Gap Report)*: a broader `LIKE '%.pak%'` sweep (vs. the original
+exact-suffix check) does find `.pak` substrings in 229 filenames / 79
+distinct mods — still a weak, non-representative signal (most filenames are
+opaque hashed zip wrappers), but not literally zero. Doesn't change the
+"needs real inspection, not a one-line query" conclusion.
 
 **Research question for deep-research**: Is there a reliable *external*
 signal short of downloading every archive — e.g., does Nexus's or mod.io's
