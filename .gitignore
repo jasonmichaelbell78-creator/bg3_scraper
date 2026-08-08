@@ -41,3 +41,8 @@ tools/
 
 # Subagent-driven-development scratch workspaces (ledgers, briefs, reports)
 .superpowers/
+
+# deep-research skill working directory (raw findings/challenges/claims;
+# final synthesized conclusions get promoted into docs/superpowers/specs/
+# by hand, matching this project's existing doc-deliverable convention)
+.research/
