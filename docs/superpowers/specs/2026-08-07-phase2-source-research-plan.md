@@ -94,7 +94,30 @@ Phase 3 script once the methodology question above is answered.
 
 </details>
 
-### 2. Load-order positioning rules (Blocking)
+### 2. Load-order positioning rules (Blocking) — RESEARCHED 2026-08-08
+
+Full `deep-research` run complete (12 agents across two sessions: initial
+pipeline + a post-synthesis orchestrator follow-up, 48 claims, 57 sources,
+1 CRITICAL dispute formally resolved). Findings promoted to
+`docs/superpowers/specs/2026-08-08-load-order-positioning-research.md`.
+Bottom line: no hand-curated per-mod mapping to the KAVT/LN/Astra/Sai/
+mod-15851 divider conventions exists anywhere (confirmed absent, matching
+gap #1's pattern) — but the landscape changed materially in the days
+before this research ran: VOLO went public with a CC0-licensed 3,138-mod
+masterlist (0.5% hand-verified, rest algorithmic), Nemix3D's BG3 Load
+Order Optimizer publishes a smaller restrictively-licensed masterlist, and
+loadorderlibrary.com hosts one large single-curator list. **The single
+most important finding is about this project's own data**: this project's
+already-scraped 930 Nexus/mod.io Collections (49,907 membership rows)
+capture collection membership but never captured mod ORDER within each
+collection — a cheap, zero-new-risk fix (pending confirming Nexus's array
+order is meaningful) that could yield ~930 curator-ordered lists from
+infrastructure that already works. This gap is closed for Phase 2
+purposes; the one remaining open question (order-meaningfulness check) and
+the scraper patch are Phase 3 (implementation) work.
+
+<details>
+<summary>Original Phase 2 sourcing plan for this gap (superseded by the research above, kept for record)</summary>
 
 **Research question**: What load-order sourcing exists beyond what Load
 Order Guidance v14 already captured that's *per-mod* and *bulk-extractable*
@@ -112,6 +135,8 @@ scraped, 527,928 rows) mined for load-order keyword mentions as a
 free/local corroborating source before any new external research.
 
 **Priority**: 2nd (Blocking).
+
+</details>
 
 ### 3. Shared-table/override conflicts (Significant) — REFRAMED 2026-08-07
 
@@ -199,7 +224,25 @@ session).
 archive-download approach, which would be its own scoping decision, not
 assumed here).
 
-### 5. Patch-8 / maintenance status (Significant)
+### 5. Patch-8 / maintenance status (Significant) — RESEARCHED 2026-08-08
+
+**Updated 2026-08-08 (consumption-weighted pass, user decision)**: real
+signals found on BOTH platforms via live API checks. mod.io's
+`Patch 8 Tested` tag covers 3,131/8,360 mods (37.5%); Nexus's
+`Patch 8 Compatible` tag (found under GraphQL's less-obvious `LegacyTag`
+type, not the newer `Tag` type checked first) covers 3,787/18,850 mods
+(20.1%). Both are already fetched by this project's existing scrapers and
+silently discarded, not new scraping. (An intermediate pass of this
+research briefly and wrongly concluded the tag was mod.io-only — caught
+and fixed same-session by loading a real Nexus mod page in a live browser
+and finding the tag rendered there, contradicting the API-only check.)
+Full findings:
+`docs/superpowers/specs/2026-08-08-patch8-known-broken-status-research.md`.
+Remaining work (adding both scraper fields, loading into `risk_flags` or a
+new table) is Phase 3, not further research.
+
+<details>
+<summary>Original Phase 2 sourcing plan for this gap (superseded by the research above, kept for record)</summary>
 
 **Research question**: What's the most reliable *bulk* signal for
 "still works on the current patch" — `platform_listings.last_updated`
@@ -220,7 +263,20 @@ the same way the Load Order Guidance v13 research already did.
 **Priority**: 5th (Significant; cheapest of the six since half the work
 is local mining of data already in hand).
 
-### 6. Known-broken / community-patch status (Significant)
+</details>
+
+### 6. Known-broken / community-patch status (Significant) — corroborating research done 2026-08-08, no equivalent shortcut found
+
+**Updated 2026-08-08**: checked both platforms live for a domain-5-style
+zero-cost tag/field shortcut (mod.io's full 9-group tag list, Nexus's 23
+tags, mod.io's per-mod object fields). Found nothing broken-status related
+on either platform — `Patch 8 Tested` (domain 5) is an affirmative signal,
+not a negative one, and no equivalent exists. Full findings:
+`docs/superpowers/specs/2026-08-08-patch8-known-broken-status-research.md`.
+The comment-corpus mining approach below remains the primary path; the
+Discord/Reddit "known issues" corroborating question remains unanswered,
+deferred (likely needs `claude-in-chrome`, same as prior Discord-sourced
+research in this project).
 
 **Same sourcing shape as #5** — extend `risk_flags`'s existing narrow
 categories (`level_cap_stack`, `legacy_ModFixer`, `subclass_no_CF`,

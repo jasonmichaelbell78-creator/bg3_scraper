@@ -1321,6 +1321,154 @@ scraping. Full findings in
   (`claude-in-chrome`), which may be environment-dependent the same way the
   Load Order Guidance research was — not yet tested for this specific work.
 
+## Total Project Plan Phase 2: Source Research — both Blocking gaps + 2 of 3 consumption-weighted domains done (2026-08-08)
+
+Picking up directly from Phase 1's Gap Report. Session opened with a stale
+view of project state — this file hadn't been updated since 2026-08-07, but
+git history showed PRs #12-14 had already landed a Phase 2 sourcing plan
+(`docs/superpowers/specs/2026-08-07-phase2-source-research-plan.md`) and a
+full deep-research pass on gap #1 (item injection/ParaTool, promoted to
+`docs/superpowers/specs/2026-08-07-item-injection-paratool-research.md`).
+**Lesson reinforced**: check git log against this file's own dates before
+trusting it as current — same discipline this file has documented before
+for other artifacts (`nexus_comments_merged.jsonl`, etc.), now applying to
+itself.
+
+**Sequencing decision (user, 2026-08-08)**: the Gap Report's own adversarial
+review had flagged an open question — continue in original Blocking-first
+order (item injection → load-order → ...) or switch to a
+consumption-weighted order (the 3 of 7 domains actually read by the
+loadout-advisor's tested code today: patch-8 status, known-broken status,
+incompatibility evidence). **User chose consumption-weighted first.**
+
+### Domains 5+6 (patch-8/maintenance status, known-broken status) — researched
+- **Domain 5 real signal found, then a self-correction, then a bigger real
+  signal found — both platforms, not just one.** First pass found mod.io's
+  `Patch 8 Tested` tag (3,131/8,360 mods, 37.5%) already sitting in
+  `bg3_scraper.py`'s existing API response, never captured — and wrongly
+  concluded Nexus had no equivalent (checked Nexus GraphQL's `tags(gameId)`
+  root query, the newer `Tag` type, found only 23 generic genre tags).
+  **Caught live, same session**: loading a real Nexus mod page
+  (`nexusmods.com/baldursgate3/mods/22457`) via `claude-in-chrome` showed a
+  rendered "Patch 8 Compatible" tag chip — contradicting the API-only
+  finding. Root cause: Nexus's **per-mod** tags use a separate, older
+  `LegacyTag` type (177 tags for BG3, reachable via
+  `mod(modId,gameId).tags` or the `legacyTags(gameId)` root query), not the
+  `Tag` type the root `tags()` query returns. Confirmed live:
+  **3,787/18,850 current Nexus BG3 mods (20.1%)** carry `Patch 8
+  Compatible` (id 4739). Also confirmed `nexus_bg3_scraper.py` already
+  fetches this field per mod (used only to filter non-English mods via
+  `has_non_english_tag()`, then discarded) — zero new scraping needed on
+  either platform. Full findings, including the self-correction sequence
+  recorded rather than hidden:
+  `docs/superpowers/specs/2026-08-08-patch8-known-broken-status-research.md`.
+- **Domain 6: no equivalent shortcut found on either platform**, checked
+  properly this time (mod.io's full 9-group tag list, both of Nexus's tag
+  types — 23 + 177 — searched for broken/outdated/deprecated/abandoned
+  language). Falls back to comment-corpus mining (Phase 3 script) as
+  originally planned; the Discord/Reddit "known issues" corroborating
+  question remains genuinely unanswered.
+- **Domain 7 (incompatibility evidence)**: confirmed out of Phase 2 scope
+  per the plan's own scoping — an internal review/promotion task against
+  already-captured `evidence_claims`, not a sourcing question.
+
+### Gap #2 (load-order positioning rules, Blocking) — researched
+Full `deep-research` run: 12 agents (7 searchers + 1 orchestrator
+live-browser pass mid-pipeline + 2 verifiers + 2 challengers + 1 dispute
+resolver), 48 claims, 57 sources, 1 CRITICAL dispute formally resolved,
+plus a second post-synthesis orchestrator live-browser pass closing the
+remaining open items. Full findings:
+`docs/superpowers/specs/2026-08-08-load-order-positioning-research.md`.
+
+- **Confirmed absent, not unfound**: no hand-curated per-mod mapping to the
+  community's named divider-bucket conventions (KAVT/LN/Astra/Sai/
+  mod-15851) exists anywhere searched (Nexus mod pages, `wiki.bg3.
+  community`, `bg3.wiki`, every relevant GitHub tool) — same "real,
+  actively-confirmed absence" pattern as gap #1.
+- **The landscape changed materially in the ~2 days before this research
+  ran.** VOLO (a LOOT-style masterlist project this project's own v13 Load
+  Order Guidance research found "not yet public" on 2026-08-06) went fully
+  public: a 3,138-mod bulk-downloadable JSON masterlist, **verbatim-
+  confirmed CC0 1.0 Universal** license (a dedicated `masterlist/LICENSE`
+  file, separate from the repo's MIT-licensed app code). Its `divider`
+  field really is Astra's actual taxonomy, used with the author's
+  ("Astralities") permission — but covers 2,814/3,138 mods (89.7%), and
+  only **16 of those 2,814 (0.5%) are hand-verified**; the rest are
+  algorithmically inferred at varying, documented reliability (order-
+  submission-header matching, name-pattern matching, category-field
+  inference, author-clustering, neighbour-position inference). A separate
+  project, Nemix3D's "BG3 Load Order Optimizer," publishes its own smaller
+  masterlist (61 rules/~40 mods) under a restrictive license requiring
+  permission to incorporate into another tool/service — documented as a
+  live consideration for this private, non-redistributed project, not
+  treated as an automatic blocker (user's call).
+- **loadorderlibrary.com** (previously unknown to this project) hosts one
+  real, large (1,334-mod), numbered, hierarchically-categorized load order
+  — the well-known "Difficulty, Immersion, Quality" collection — directly
+  fetchable via a predictable zero-auth URL pattern once Cloudflare is
+  cleared by a real browser session. Single anonymous curator's list, not
+  a community consensus; flagged as carrying a "collection-specific
+  confound" risk (its exact positions reflect one specific 1,016-mod
+  combination), not just a "single-curator" risk.
+- **Confirmed via direct source read**: BG3ModManager, `bg3se`, and
+  `lslib` have zero built-in load-order calculation/auto-sort logic beyond
+  passive display of Larian's own `Dependencies`/`Conflicts` metadata. A
+  fan site's claim that BG3ModManager has a "Sort by Dependencies" feature
+  is fabricated — refuted by both the source code and the project's own
+  open GitHub Discussion #376 (still an unfulfilled request as of May
+  2025). A WebSearch-summarized "five bucket" category scheme for
+  `wiki.bg3.community`'s load-order guide also turned out to be inaccurate
+  paraphrase-drift once the real page was fetched directly — the actual
+  section names are completely different. Both are concrete, citable
+  repeats of this project's established "primary source over paraphrase"
+  lesson (BG3ModManager log path, Osiris Log), now demonstrated twice more
+  in one research run.
+- **The single most important finding is about this project's own data,
+  not anything external.** An Outside-the-Box challenge pass — verified
+  directly against this project's own scraper source code and DB schema,
+  not just inferred — found that the 930 Nexus + mod.io Collections
+  already scraped by this project (2026-07-24; 49,907 membership rows in
+  `catalog_collection_memberships`) capture WHICH mods are in each
+  collection but **never captured their internal ORDER**: the GraphQL
+  query never requested an index/position field, the JSONL write loop
+  never recorded array position, and no position column exists in the DB
+  (only an accidental, undocumented `source_line_number` proxy). If
+  Nexus's `modFiles` array order turns out to be curator-meaningful (the
+  one remaining open question from this entire research pass — cheaply
+  checkable by comparing a fresh read of the DIQ Collection against its
+  already-captured loadorderlibrary.com mirror), recovering it would give
+  this project **~930 curator-ordered lists** — potentially exceeding
+  VOLO's single 3,138-mod masterlist in aggregate curator-days of
+  judgment — via infrastructure that already works at full scale: no new
+  Cloudflare risk, no new licensing exposure, just a scraper patch and a
+  re-run of an already-proven pipeline.
+- **A CRITICAL synthesis defect was caught and resolved via formal dispute
+  resolution**: the original synthesis's Theme 3 ("no per-mod bucket
+  mapping exists anywhere") was never reconciled against its own Theme 1
+  (VOLO's `divider` field). Resolved as "No Conflict/Complementary" after
+  a direct re-fetch of VOLO's own primary sources — both findings are true
+  and answer different questions (verified/hand-curated mapping vs.
+  probabilistic/machine-inferred mapping) — a second independent
+  confirmation (after gap #1's research) that this project's mandatory
+  contrarian/OTB challenge phase catches real, load-bearing issues a
+  single synthesis pass misses.
+- **Process note**: both Phase 2.5 verifier agents hit the known Windows
+  agent-output-truncation bug on their first attempt (chat-visible
+  `<result>` text ending mid-sentence, and the expected findings file
+  genuinely absent from disk) — both succeeded cleanly on a retry with a
+  tighter tool-call budget and instructions to write incrementally, same
+  fix as gap #1's own V2 agent needed. The orchestrator doing its own
+  live-browser verification passes (twice) was more effective than
+  spawning gap-pursuer subagents for browser-blocked sources, since
+  subagents in this pipeline lack `claude-in-chrome` entirely and would
+  have hit the identical walls the original searchers did.
+
+**Next**: the Collections order-meaningfulness check (cheap, potentially
+the highest-value single next step across all of Phase 2/3) is the one
+open item from gap #2. Remaining Phase 2 work: gap #3 (shared-table
+conflicts, already reframed as an evidence-review task, likely mergeable
+with domain 7) and gap #4 (deployment type) are still unresearched.
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
