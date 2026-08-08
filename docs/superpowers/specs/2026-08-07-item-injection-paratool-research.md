@@ -82,6 +82,20 @@ priority was reordered accordingly.
    scraped by this project at all (zero Nexus rows in `platform_tags`),
    includes a directly useful "Patch 8 Compatible" tag, but belongs to the
    patch-8/maintenance-status gap (Phase 2 plan gap #5), not this one.
+   **Correction (2026-08-08, gap #5 research), then re-corrected same
+   day**: this recommendation was originally right that Nexus has a
+   "Patch 8 Compatible" tag — a first re-check wrongly "corrected" that to
+   "mod.io only," having queried the wrong Nexus GraphQL tag type (the
+   newer `Tag` type, 23 generic tags) instead of the one actually used for
+   per-mod tags (`LegacyTag`, 177 tags, includes `Patch 8 Compatible`,
+   confirmed live via `mod(modId,gameId).tags`). Caught by loading a real
+   Nexus mod page in a live browser and seeing the tag rendered, which
+   contradicted the API-only finding. **Both platforms have the tag**:
+   mod.io `Patch 8 Tested` (3,131/8,360, 37.5%), Nexus `Patch 8 Compatible`
+   (3,787/18,850, 20.1%) — both already fetched by this project's existing
+   scrapers and discarded, not new scraping. See
+   `docs/superpowers/specs/2026-08-08-patch8-known-broken-status-research.md`
+   for the full corrected findings.
 6. **If ever revisited for bulk automation**: the AMP `dependencies`-table
    reverse-lookup (needs official-vs-third-party triage on the 8 rows,
    should also be run against REL's own mod_uid), live-querying Nexus's
