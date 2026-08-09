@@ -76,16 +76,15 @@ a small patch and a re-run.
 
 ## Recommendations (priority order)
 
-1. **Highest priority: check whether Nexus's `modFiles` array order is
-   curator-meaningful** (cheap — compare a fresh read of the "Difficulty,
-   Immersion, Quality" Collection against its already-captured
-   loadorderlibrary.com mirror). If confirmed: patch
-   `nexus_collections_scraper.py`/`modio_deep_collections.py` to capture
-   per-entry position, add a `position` column to
-   `catalog_collection_memberships`, re-run the full 930-collection sweep
-   (well under an hour). Do this before any external-ingestion work below —
-   zero new licensing/access risk, reuses proven infrastructure. **This is
-   now the single open item from the whole research pass.**
+1. ~~Highest priority: check whether Nexus's `modFiles` array order is
+   curator-meaningful~~ **Done, 2026-08-09 — resolved negative.** Fresh
+   Nexus GraphQL data compared against loadorderlibrary.com's real curated
+   order for the same collection: Spearman correlation ≈ 0 (-0.077, n=387),
+   and "Compatibility Framework" (which must load last) sits at position
+   803/1015 in Nexus's array instead of the end. **Nexus's `modFiles` order
+   is not curator-meaningful** — the scraper-patch/re-sweep plan below is
+   not worth pursuing. Full writeup:
+   `docs/superpowers/specs/2026-08-09-collections-order-meaningfulness-check.md`.
 2. **Pilot VOLO's masterlist as a low-trust supplementary signal, not a
    blanket-trusted source.** Filter by its per-mod `evidence` field
    (install/working/broken counts) rather than uniformly ingesting all
@@ -133,9 +132,8 @@ a small patch and a re-run.
 
 ## What's still open
 
-- **Whether Nexus's Collections `modFiles` array order is actually
-  meaningful** — the one remaining open question from the entire research
-  pass, and now the top-priority next step (Recommendation 1).
+- ~~Whether Nexus's Collections `modFiles` array order is actually
+  meaningful~~ **Resolved 2026-08-09 — no.** See Recommendation 1 above.
 - Astra's mod (21532) exact category-list content — title/authorship
   confirmed, but the specific bucket names weren't re-extracted during the
   final verification pass.
