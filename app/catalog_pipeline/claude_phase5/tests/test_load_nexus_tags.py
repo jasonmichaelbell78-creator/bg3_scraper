@@ -108,3 +108,102 @@ def test_insert_nexus_tags_blank_lines_ignored(conn, tmp_path):
     counts = insert_nexus_tags(conn, f, lookup)
     assert counts["mods_seen"] == 1
     assert counts["tags_inserted"] == 0
+
+
+import hashlib
+
+from app.catalog_pipeline.claude_phase5.load_nexus_tags import run_migration
+from app.catalog_pipeline.claude_phase5.tests.fixtures import insert_existing_tag
+
+
+def _sha256_of(path):
+    digest = hashlib.sha256()
+    with open(path, "rb") as fh:
+        digest.update(fh.read())
+    return digest.hexdigest()
+
+
+@pytest.fixture
+def db_and_source(tmp_path):
+    db_path = tmp_path / "candidate.db"
+    conn = sqlite3.connect(str(db_path))
+    create_fixture_db(conn)
+    insert_listing(conn, 1, "nexus", "24291")
+    insert_listing(conn, 2, "modio", "5000")
+    insert_existing_tag(conn, 2, "Existing ModIO Tag")  # pre-existing unrelated data
+    conn.commit()
+    conn.close()
+
+    tags_path = tmp_path / "tags.jsonl"
+    tags_path.write_text(json.dumps({"nexus_mod_id": 24291, "tags": ["Patch 8 Compatible"], "_fetched_at": "x"}) + "\n")
+    return db_path, tags_path
+
+
+def test_run_migration_full_run_inserts_rows(db_and_source):
+    db_path, tags_path = db_and_source
+    sha256 = _sha256_of(db_path)
+    receipt = run_migration(db_path, sha256, tags_path)
+
+    assert receipt["tags_inserted"] == 1
+    assert receipt["platform_tags_rows_before"] == 1  # the pre-existing mod.io row
+    assert receipt["platform_tags_rows_after"] == 2
+
+    conn = sqlite3.connect(str(db_path))
+    row = conn.execute("SELECT listing_id, tag FROM platform_tags WHERE listing_id = 1").fetchone()
+    conn.close()
+    assert row == (1, "Patch 8 Compatible")
+
+
+def test_run_migration_hash_mismatch_raises(db_and_source):
+    db_path, tags_path = db_and_source
+    with pytest.raises(ValueError):
+        run_migration(db_path, "wrong-hash-deadbeef", tags_path)
+
+
+def test_run_migration_second_run_raises_integrity_error(db_and_source):
+    db_path, tags_path = db_and_source
+    first_sha256 = _sha256_of(db_path)
+    run_migration(db_path, first_sha256, tags_path)
+
+    second_sha256 = _sha256_of(db_path)
+    with pytest.raises(sqlite3.IntegrityError):
+        run_migration(db_path, second_sha256, tags_path)
+
+
+def test_run_migration_writes_migration_history_row(db_and_source):
+    db_path, tags_path = db_and_source
+    sha256 = _sha256_of(db_path)
+    run_migration(db_path, sha256, tags_path)
+
+    conn = sqlite3.connect(str(db_path))
+    row = conn.execute(
+        "SELECT migration_name, schema_version, row_count_before, row_count_after "
+        "FROM migration_history WHERE migration_name = 'b26-phase5-nexus-tags'"
+    ).fetchone()
+    conn.close()
+    assert row == ("b26-phase5-nexus-tags", "phase5", "1", "2")
+
+
+def test_run_migration_rolls_back_on_malformed_source_line(db_and_source):
+    db_path, tags_path = db_and_source
+    # Second line is invalid JSON -- must abort the whole transaction, not
+    # partially insert the first (valid) line before failing.
+    tags_path.write_text(
+        json.dumps({"nexus_mod_id": 24291, "tags": ["Patch 8 Compatible"], "_fetched_at": "x"}) + "\n"
+        + "{not valid json\n"
+    )
+    sha256 = _sha256_of(db_path)
+
+    with pytest.raises(json.JSONDecodeError):
+        run_migration(db_path, sha256, tags_path)
+
+    conn = sqlite3.connect(str(db_path))
+    count = conn.execute("SELECT COUNT(*) FROM platform_tags").fetchone()[0]
+    history_count = conn.execute(
+        "SELECT COUNT(*) FROM migration_history WHERE migration_name = 'b26-phase5-nexus-tags'"
+    ).fetchone()[0]
+    conn.close()
+    # Only the pre-existing mod.io row survives -- the attempted Nexus insert
+    # and the migration_history claim row were both rolled back.
+    assert count == 1
+    assert history_count == 0
