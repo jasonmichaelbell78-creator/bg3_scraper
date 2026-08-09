@@ -1463,11 +1463,63 @@ remaining open items. Full findings:
   subagents in this pipeline lack `claude-in-chrome` entirely and would
   have hit the identical walls the original searchers did.
 
-**Next**: the Collections order-meaningfulness check (cheap, potentially
-the highest-value single next step across all of Phase 2/3) is the one
-open item from gap #2. Remaining Phase 2 work: gap #3 (shared-table
-conflicts, already reframed as an evidence-review task, likely mergeable
-with domain 7) and gap #4 (deployment type) are still unresearched.
+**Collections order-meaningfulness check: done, 2026-08-09 — resolved
+negative.** Fresh Nexus GraphQL `modFiles` order for the "Difficulty,
+Immersion, Quality" collection (slug `pns4qv`) compared against
+loadorderlibrary.com's real curated order for the same 1,016-mod
+collection (reached via its undocumented but zero-auth `api.
+loadorderlibrary.com/v1` JSON endpoint — its frontend is a client-rendered
+SPA that `curl`/`WebFetch` can't read, same wall the 2026-08-08 research
+hit, sidestepped without needing a browser this time; `claude-in-chrome`
+did do one live-page corroboration afterward once the extension was
+reconnected mid-session, confirming the API data matched the rendered
+page exactly). Result: Spearman rank correlation **-0.077** (n=387
+overlapping mods, effectively zero), and "Compatibility Framework" — which
+must load last by hard requirement, and does sit last (1333/1334) in
+loadorderlibrary's real order — sits at position **803/1015** in Nexus's
+array, nowhere near the end. **Nexus's Collections `modFiles` array order
+is not curator-meaningful** (not alphabetical either — 1/1015 match).
+Closes out Recommendation 1 from the load-order-positioning research as
+not worth pursuing — the ~930-curator-ordered-lists idea doesn't pan out,
+so no scraper patch or DB column is needed. Full writeup:
+`docs/superpowers/specs/2026-08-09-collections-order-meaningfulness-check.md`.
+
+**Gap #4 (deployment type): researched, 2026-08-09 — full deep-research
+pipeline including a mandatory gap-pursuit round that reversed the initial
+conclusion.** No ready-made deployment-type field exists on Nexus or mod.io
+(exhaustively checked). A genuine synthesis discovery — Nexus's
+`modFileContents` bulk archive-listing API combined with BG3ModManager's own
+exact `ScriptExtender/Config.json` detection rule (independently corroborated
+by bg3se's own docs) — looked like a real answer after the first synthesis
+and challenge rounds, but the mandatory gap-pursuit round tested it directly
+and found it **confirmed non-viable**: the API never unpacks a `.pak`
+archive's internal contents (verified twice independently, including on two
+known Script-Extender-dependent mods that ship pak-only and show zero
+SE-related paths), and PAK is the majority Nexus deployment type. What
+actually works, found by the OTB challenge: **VOLO's public CC0 masterlist
+(already vetted by the 2026-08-08 load-order research) already has a computed
+`usesScriptExtender` field for 31.5% of the corpus (6,296/19,967 mods), zero
+new scraping needed** — now the strongest actionable recommendation. Honest
+remaining gap: ~68.5% of the corpus has no good bulk external deployment-type
+signal after this research — a real, complete negative result, not an
+unresolved question. Also resolved a standing project question along the
+way: `wiki.bg3.community` DOES have a public GitHub source repo
+(`BG3-Community-Library-Team/bg3-community`), confirmed via 5 converging
+signals, containing a six-category deployment taxonomy (PAK/MOD FIXER/LOOSE
+FILES/NATIVE MODS/MANUAL INSTALLATION/SCRIPT EXTENDER) worth using as
+reference vocabulary. Pipeline hit the known Windows agent-output-truncation
+bug 4 times (all recovered via retry with tighter budgets). Full writeup:
+`docs/superpowers/specs/2026-08-09-deployment-type-research.md`.
+
+**Next**: gap #3 (shared-table conflicts) needs no further Phase 2 research —
+already reframed as a data-review/tagging task against `evidence_claims` rows
+already captured, folding into gap #7 (a Phase 3 implementation task, not
+sourcing). **This closes out all of Total Project Plan Phase 2 (Source
+Research)** — every Blocking and Significant gap from the Phase 1 Gap Report
+has now either been researched or correctly reframed as non-research work.
+Phase 3 (implementation: VOLO ingestion, patch-8/known-broken risk_flags
+fields, evidence_claims review/tagging) is the next open thread, not yet
+scoped.
 
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.

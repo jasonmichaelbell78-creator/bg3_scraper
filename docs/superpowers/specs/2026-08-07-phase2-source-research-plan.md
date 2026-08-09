@@ -192,7 +192,24 @@ settling this explicitly rather than assuming either way.
 "external sourcing" to "mine/review existing `evidence_claims` content
 first" — see domain 7 below, which this likely merges into.
 
-### 4. Deployment type (Significant)
+### 4. Deployment type (Significant) — RESEARCHED 2026-08-09
+
+**Researched via full deep-research pipeline, including a mandatory
+gap-pursuit round that reversed the initial synthesis's conclusion.** No
+ready-made field exists on either platform. A genuine synthesis discovery
+(Nexus's `modFileContents` bulk archive-listing API + BG3ModManager's exact
+`ScriptExtender/Config.json` detection rule) was found, then tested and
+confirmed non-viable in practice — the API never unpacks `.pak` archive
+contents, and PAK is the majority Nexus deployment type. What actually works:
+VOLO's masterlist (already vetted by the 2026-08-08 load-order research)
+already has a computed `usesScriptExtender` field for 31.5% of the corpus,
+zero new scraping needed — now the strongest actionable recommendation from
+this research. Honest remaining gap: ~68.5% of the corpus has no good bulk
+external deployment-type signal after this research. Full findings:
+`docs/superpowers/specs/2026-08-09-deployment-type-research.md`.
+
+<details>
+<summary>Original Phase 2 sourcing plan for this gap (superseded by the research above, kept for record)</summary>
 
 **Local-data check done this session**: confirmed `platform_file_records`
 only has outer download archives (106,783 rows, 99.4% of listings have at
@@ -223,6 +240,8 @@ session).
 **Priority**: 4th (Significant; may turn out to need the heavier
 archive-download approach, which would be its own scoping decision, not
 assumed here).
+
+</details>
 
 ### 5. Patch-8 / maintenance status (Significant) — RESEARCHED 2026-08-08
 
