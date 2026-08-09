@@ -1521,6 +1521,83 @@ Phase 3 (implementation: VOLO ingestion, patch-8/known-broken risk_flags
 fields, evidence_claims review/tagging) is the next open thread, not yet
 scoped.
 
+## Total Project Plan Phase 3, Workstream 1: Patch-8 tag capture — COMPLETE (2026-08-09)
+
+Picking up Phase 3 (Deep Mining Execution) — five independent workstreams
+identified from the Phase 2 research; this closes the first and cheapest
+one (chosen by the user 2026-08-09 over VOLO ingestion, evidence-claims
+review, and comment-corpus mining for known-broken status).
+
+- **A real correction to the Phase 2 research doc, found while designing
+  this workstream**: `docs/superpowers/specs/2026-08-08-patch8-known-broken-status-research.md`
+  claimed both platforms' patch-8 tags were "already fetched but discarded,
+  zero extra scraping cost." Checking the actual code and DB directly found
+  that's only true for mod.io. `nexus_bg3_scraper.py` calls Nexus's v1 REST
+  API, confirmed live to have **no `tags` field at all** — the existing
+  `has_non_english_tag(mod.get("tags") or [])` filter has always silently
+  operated on an empty list. The candidate DB's pre-existing `platform_tags`
+  table (a B25-era capture) had 7,921/8,158 mod.io listings tagged
+  (including `Patch 8 Tested` on 3,044) but **zero Nexus rows** — confirming
+  Nexus tags had genuinely never been captured by this project at all, only
+  reachable via GraphQL's `mods().tags` field, never called for this
+  purpose before.
+- Design: `docs/superpowers/specs/2026-08-09-phase3-patch8-tag-capture-design.md`.
+  Plan: `docs/superpowers/plans/2026-08-09-phase3-patch8-tag-capture.md`.
+- **New script**: `app/scripts/nexus_tags_scraper.py` — bulk-fetches every
+  Nexus BG3 mod's full tag list via one paginated, unauthenticated GraphQL
+  query (`mods(filter:{gameId})`, no per-mod calls needed). Found live
+  during the actual run: the API caps real page size at 80 rows even when
+  100 is requested (undocumented, same class of finding as mod.io's own
+  page-size ceiling found earlier in this project) — harmless, since the
+  script advances `offset` by the actual row count returned, not the
+  requested page size. Full sweep: 18,871 rows / 18,870 unique mod IDs (one
+  natural duplicate from the mod list changing mid-sweep, a live several-
+  minute paginated walk against a continuously-updated site) written to
+  `data/nexus/nexus_tags.jsonl` (gitignored).
+- **New migration**: `app/catalog_pipeline/claude_phase5/load_nexus_tags.py`,
+  following the established `claude_phase3`/`claude_phase4` hash-gate/
+  backup/transaction/receipt discipline exactly — 12/12 TDD tests passing
+  (parsing, listing lookup, unmapped/duplicate-tag guards, hash-gate,
+  rerun-blocked via `migration_history`'s unique constraint, and an explicit
+  rollback-on-malformed-source-line test proving atomicity).
+- **Real migration run, 2026-08-09**: pre-migration hash verified against
+  the last known-good hash (`3f925145...`, from the B26 Phase 4
+  `migration_history` backfill) before proceeding, per the standing
+  never-override-an-unexplained-mismatch rule. Result: `platform_tags`
+  42,040 → 74,838 rows (+32,798 Nexus tag rows), 18,871 mods seen, 7,152
+  skipped as unmapped (no matching `platform_listings` row — expected,
+  matches the known ~37% Nexus coverage gap in that table), 0 duplicate
+  tags skipped within this run. Final DB hash `183380d5...`. Receipt:
+  `catalog/B26/phase5_nexus_tags_receipt.json` (gitignored).
+- **Independently verified** (not just the script's own receipt): re-queried
+  `platform_tags` by platform directly (modio 42,040 unchanged, nexus
+  32,798 matching the receipt exactly), `PRAGMA integrity_check` → `ok`,
+  zero FK violations, a 3-row spot-check of inserted Nexus rows showed real
+  tag data. `Patch 8 Compatible` count among linked Nexus listings: 3,208
+  of 11,809 (27.2%) — higher than the full-corpus rate found during
+  research (3,794/18,871, 20.1%), plausibly because `platform_listings`'
+  Nexus subset (the still-unresolved B25-era baseline noted in the B26
+  Phase 4 section above) skews toward older, more-established mods more
+  likely to already carry the tag than newer arrivals not yet in that
+  table — not a red flag, not investigated further.
+- Execution note: this workstream was run collaboratively — Claude wrote
+  and TDD'd all the code, the user ran the two live/data-touching steps
+  from their own terminal (the full Nexus sweep, and the real DB migration)
+  to keep token usage down, matching how the original mod.io/Nexus scraper
+  runs were always executed directly by the user. Two real process notes
+  from doing it this way: bare `pytest` fails to resolve the `app` package
+  in this repo (no `app/__init__.py`, no root `pytest.ini`/`conftest.py`) —
+  **use `python -m pytest`, not `pytest`, for this project's tests**; and a
+  copy-paste mixup put Task 4's test code into the implementation file
+  instead of the test file, caught immediately by the resulting circular-
+  import error rather than silently producing a false pass.
+- **Next**: four Phase 3 workstreams remain, unstarted — VOLO masterlist
+  ingestion (serves both the load-order and deployment-type gaps at once),
+  evidence-claims review/tagging (incompatibility backlog + shared-table
+  conflicts), known-broken status via comment-corpus mining, and the
+  item-injection consumption rework. None scheduled yet; pick up per user
+  priority next session.
+
 ## Next steps
 1. ~~Confirm `nexusmods.com` loads normally from home.~~ Done.
 2. ~~Investigate the Posts tab live via Playwright.~~ Done — endpoint, auth
