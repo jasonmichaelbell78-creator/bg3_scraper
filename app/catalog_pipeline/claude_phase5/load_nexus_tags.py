@@ -35,3 +35,41 @@ def load_nexus_listing_lookup(conn: sqlite3.Connection) -> dict:
         "SELECT platform_mod_id, listing_id FROM platform_listings WHERE platform = 'nexus'"
     ).fetchall()
     return {platform_mod_id: listing_id for platform_mod_id, listing_id in rows}
+
+
+def insert_nexus_tags(conn: sqlite3.Connection, filepath: Path, listing_lookup: dict) -> dict:
+    mods_seen = 0
+    tags_inserted = 0
+    skipped_unmapped_mods = 0
+    skipped_duplicate_tags = 0
+    seen_pairs = set()
+
+    with open(filepath, "r", encoding="utf-8") as fh:
+        for line in fh:
+            line = line.strip()
+            if not line:
+                continue
+            parsed = parse_tags_line(line)
+            mods_seen += 1
+            listing_id = listing_lookup.get(parsed["nexus_mod_id"])
+            if listing_id is None:
+                skipped_unmapped_mods += 1
+                continue
+            for tag in parsed["tags"]:
+                key = (listing_id, tag)
+                if key in seen_pairs:
+                    skipped_duplicate_tags += 1
+                    continue
+                seen_pairs.add(key)
+                conn.execute(
+                    "INSERT INTO platform_tags (listing_id, tag) VALUES (?, ?)",
+                    (listing_id, tag),
+                )
+                tags_inserted += 1
+
+    return {
+        "mods_seen": mods_seen,
+        "tags_inserted": tags_inserted,
+        "skipped_unmapped_mods": skipped_unmapped_mods,
+        "skipped_duplicate_tags": skipped_duplicate_tags,
+    }
