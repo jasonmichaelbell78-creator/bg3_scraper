@@ -142,3 +142,49 @@ def find_best_match(
             best_mod_uid, best_status, best_score = mod_uid, "needs_review", score
 
     return best_mod_uid, best_status, best_score
+
+
+def build_divider_signal_row(
+    plugin: dict, mod_uid: int | None, match_status: str, match_score: float,
+    source_version: str, captured_at: str,
+) -> tuple:
+    evidence = plugin.get("evidence") or {}
+    return (
+        mod_uid,
+        plugin["uuid"],
+        plugin["name"],
+        plugin.get("author"),
+        plugin.get("group"),
+        plugin.get("divider"),
+        evidence.get("source"),
+        evidence.get("installs"),
+        evidence.get("workingInstalls"),
+        evidence.get("brokenInstalls"),
+        match_status,
+        match_score,
+        source_version,
+        captured_at,
+    )
+
+
+def insert_divider_signals(
+    conn: sqlite3.Connection, plugins: list[dict], candidates: list[tuple[int, str, str]],
+    source_version: str, captured_at: str,
+) -> dict:
+    counts = {"divider_rows_inserted": 0, "divider_matched": 0, "divider_needs_review": 0, "divider_unmatched": 0}
+    for plugin in plugins:
+        if "divider" not in plugin:
+            continue
+        mod_uid, status, score = find_best_match(plugin["name"], plugin.get("author"), candidates)
+        row = build_divider_signal_row(plugin, mod_uid, status, score, source_version, captured_at)
+        conn.execute(
+            """INSERT INTO catalog_volo_divider_signals
+               (mod_uid, volo_uuid, volo_name, volo_author, group_name, divider_position,
+                evidence_source, evidence_installs, evidence_working_installs,
+                evidence_broken_installs, match_status, match_score, source_version, captured_at)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)""",
+            row,
+        )
+        counts["divider_rows_inserted"] += 1
+        counts[f"divider_{status}"] += 1
+    return counts
